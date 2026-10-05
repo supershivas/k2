@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1C1C1E">
+  <meta name="theme-color" content="#0F380F">
   <meta name="apple-mobile-web-app-title" content="K2">
   <title>K2</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -46,7 +46,6 @@
 
       <section class="home" id="home">
         <h1>K2</h1>
-        <p class="tagline">8 611 m de roche et de glace.<br>Seul face à la paroi.</p>
         <button class="btn btn-primary" id="btn-play" type="button"><i class="ti ti-mountain"></i><span id="btn-play-label">Grimper</span></button>
         <button class="btn" id="btn-editor" type="button"><i class="ti ti-pencil"></i> Éditeur de sprites</button>
         <p class="records" id="records"></p>
@@ -60,6 +59,7 @@
       <button class="act" id="b-eat" type="button"><i class="ti ti-meat"></i><span>Manger</span></button>
       <button class="act" id="b-o2" type="button"><i class="ti ti-bottle"></i><span>O₂</span></button>
       <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span>Camper</span></button>
+      <button class="act" id="b-radio" type="button"><i class="ti ti-cloud-storm"></i><span>Météo</span></button>
     </div>
     <div class="steps">
       <button class="step" id="b-left" type="button"><i class="ti ti-chevron-left"></i><span>Gauche</span></button>
@@ -95,11 +95,11 @@
     <div class="tabs" id="ed-tabs" role="tablist"></div>
     <div class="ed-main">
       <div class="ed-board">
-        <canvas id="ed-canvas" width="16" height="16"></canvas>
+        <canvas id="ed-canvas" width="8" height="8"></canvas>
         <div class="ed-grid"></div>
       </div>
       <div class="ed-side">
-        <div class="ed-preview"><canvas id="ed-prev1" width="16" height="16"></canvas><canvas id="ed-prev2" width="16" height="16"></canvas></div>
+        <div class="ed-preview"><canvas id="ed-prev1" width="8" height="8"></canvas><canvas id="ed-prev2" width="8" height="8"></canvas></div>
         <div class="tools" id="ed-tools">
           <button class="tool" data-tool="pencil" type="button" aria-label="Crayon" title="Crayon"><i class="ti ti-pencil"></i></button>
           <button class="tool" data-tool="eraser" type="button" aria-label="Gomme" title="Gomme"><i class="ti ti-eraser"></i></button>
@@ -118,6 +118,14 @@
     <div class="ed-foot">
       <button class="btn" id="ed-reset" type="button"><i class="ti ti-restore"></i> Sprite d’origine</button>
       <button class="btn btn-primary" data-close type="button"><i class="ti ti-check"></i> Terminé</button>
+    </div>
+  </dialog>
+
+  <dialog id="radio" class="modal modal-narrow radio">
+    <div class="modal-head"><h2>Radio météo</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
+    <div class="gb-body">
+      <div class="gb-screen"><canvas id="radio-screen" width="160" height="144" aria-label="Prévisions du lendemain"></canvas></div>
+      <div class="gb-label">Prévisions du lendemain à ton altitude</div>
     </div>
   </dialog>
 

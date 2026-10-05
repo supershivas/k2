@@ -1,5 +1,6 @@
 import { Game, SUMMIT, newState } from './game.js';
-import { loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
+import { PALETTE as P, loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
+import { drawText } from './pixfont.js';
 import { initEditor, openEditor } from './editor.js';
 import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from '../app-update.js';
 
@@ -127,7 +128,7 @@ function play() {
   $('home').hidden = true;
   document.body.classList.remove('paused');
   game.playing = true;
-  if (game.s.steps === 0) say('Alterne Gauche / Droite pour grimper', 'info');
+  if (game.s.steps === 0) say('Alterne Gauche / Droite. Deux fois pareil : traverser', 'info');
 }
 
 function closeAllDialogs() {
@@ -159,12 +160,49 @@ function updateHud() {
   $('b-grip').classList.toggle('on', game.grip);
 }
 
+// ── Radio météo (écran Game Boy) ─────────────────────────────────────────
+function openRadio() {
+  if (!game.playing || game.busy) return;
+  game.setGrip(false);
+  $('radio').showModal();
+  drawRadio(game.forecast());
+}
+
+function drawRadio(fc) {
+  const g = $('radio-screen').getContext('2d');
+  g.fillStyle = P[3]; g.fillRect(0, 0, 160, 144);
+  drawText(g, 'METEO', 6, 6, P[0], 2);
+  drawText(g, `JOUR ${fc.day}`, 100, 8, P[1]);
+  drawText(g, `A ${fc.alt} M`, 100, 15, P[1]);
+  g.fillStyle = P[0]; g.fillRect(6, 24, 148, 1);
+  const x0 = 12, colW = 17, base = 88, maxH = 48;
+  fc.slots.forEach((sl, i) => {
+    const x = x0 + i * colW;
+    if (sl.dark) { g.fillStyle = P[2]; g.fillRect(x - 1, 30, colW - 1, base - 30); }
+    const wh = Math.round(sl.wind * maxH), sh = Math.round(sl.snow * maxH);
+    g.fillStyle = sl.wind > 0.6 ? P[4] : P[0]; g.fillRect(x + 1, base - wh, 6, wh);
+    g.fillStyle = P[1]; g.fillRect(x + 8, base - sh, 6, sh);
+    drawText(g, String(sl.h).padStart(2, '0'), x + 3, base + 4, P[0]);
+  });
+  g.fillStyle = P[0]; g.fillRect(6, base, 148, 1);
+  g.fillRect(8, 105, 5, 5); g.fillStyle = P[1]; g.fillRect(50, 105, 5, 5);
+  drawText(g, 'VENT', 16, 105, P[0]); drawText(g, 'NEIGE', 58, 105, P[0]);
+  g.fillStyle = P[2]; g.fillRect(100, 105, 5, 5);
+  drawText(g, 'NUIT', 108, 105, P[0]);
+  const temps = fc.slots.map(sl => sl.T);
+  drawText(g, `MIN ${Math.round(Math.min(...temps))}  MAX ${Math.round(Math.max(...temps))}`, 8, 116, P[0]);
+  const w = Math.max(...fc.slots.map(sl => sl.wind)), n = Math.max(...fc.slots.map(sl => sl.snow));
+  const verdict = w > 0.7 ? 'TEMPETE: RESTE AU CAMP' : w > 0.45 ? 'RAFALES: GARDE LA PRISE' : n > 0.5 ? 'NEIGE: PROGRESSION LENTE' : 'CALME: BON JOUR POUR GRIMPER';
+  g.fillStyle = P[0]; g.fillRect(4, 128, 152, 12);
+  drawText(g, verdict, 8, 132, P[3]);
+}
+
 // ── Boucle ───────────────────────────────────────────────────────────────
 let prev = performance.now(), hudAt = 0, saveAt = 0;
 function loop(now) {
   const dt = (now - prev) / 1000;
   prev = now;
-  game.update(dt);
+  if (!document.querySelector('dialog[open]')) game.update(dt);
   game.render();
   if (now - hudAt > 100) { hudAt = now; updateHud(); }
   if (game.playing && now - saveAt > 2000) { saveAt = now; updateRecords(); save(); saveRecords(); }
@@ -181,6 +219,7 @@ press($('b-right'), () => game.step('R'));
 press($('b-eat'), () => game.eat());
 press($('b-o2'), () => game.toggleOxygen());
 press($('b-camp'), () => game.camp());
+$('b-radio').addEventListener('click', openRadio);
 const gripBtn = $('b-grip');
 gripBtn.addEventListener('pointerdown', e => { e.preventDefault(); gripBtn.setPointerCapture(e.pointerId); game.setGrip(true); });
 ['pointerup', 'pointercancel'].forEach(t => gripBtn.addEventListener(t, () => game.setGrip(false)));
@@ -195,6 +234,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'e') game.eat();
   else if (e.key === 'o') game.toggleOxygen();
   else if (e.key === 'c') game.camp();
+  else if (e.key === 'm') openRadio();
 });
 window.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'ArrowDown') game.setGrip(false); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { updateRecords(); save(); saveRecords(); game.setGrip(false); } });
