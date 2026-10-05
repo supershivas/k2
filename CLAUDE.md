@@ -25,6 +25,15 @@ Vanilla JS statique (modules ES, aucune dépendance, aucun build), canvas 100×1
 - `version.json`, `CHANGELOG.md` : versions. `app-update.js`, `mobile.css`, `design-tokens.json` : synchronisés depuis le design system.
 - `sprites.json` : créé par le bouton « Publier les sprites » des réglages (absent tant que rien n'est publié, d'où un 404 inoffensif).
 
+## Conventions jeux
+
+Règles propres aux jeux (à porter dans CONVENTIONS.md, voir proposition ci-dessous) :
+
+- Jamais de sous-titre ni de baseline sous le nom d'un jeu ou d'une app : ni en en-tête, ni sur l'écran d'accueil.
+- Palette du jeu limitée et déclarée dans le `CLAUDE.md`, identique entre canvas, HUD et commandes. En-têtes, réglages et modales gardent les tokens.
+- Commandes jouables au pouce (zones de 44 px minimum) et au clavier.
+- Le jeu se met en pause quand une modale est ouverte et se sauvegarde tout seul (pas de perte à la mise à jour automatique).
+
 ## Exceptions aux conventions
 
 - La palette du jeu (4 verts Game Boy + rose fluo `#FF3CAC`) est volontairement hors tokens : canvas, HUD, boutons de commande et accueil. Les en-têtes, réglages et modales utilisent les tokens. `PALETTE` (js/sprites.js) et les variables `--gb0..3`, `--fluo` (style.css) doivent rester identiques.
