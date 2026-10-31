@@ -10,18 +10,18 @@ Jeu de pixel art où l'on escalade le K2 (8 611 m). La montagne est vue de face,
 - Cible : **mobile et bureau** (tactile et clavier).
 - Production : https://supershivas.github.io/k2/
 
-Gameplay : cycle jour/nuit, vent (rafales qui déportent, à encaisser en maintenant « Prise »), neige, froid, oxygène au-dessus de 6 500 m, ressources à ramasser sur la paroi (vivres, gaz, O₂, une tous les ~110 m, visibles en rose fluo), blocs, verglas et chutes de pierres à esquiver, camps d'altitude qui servent de points de retour après une chute, radio météo (écran Game Boy) pour les prévisions du lendemain. Éditeur de sprites 8×8 intégré.
+Gameplay : cycle jour/nuit, vent (rafales qui déportent, à encaisser en maintenant « Prise »), neige, froid, oxygène au-dessus de 6 500 m, ressources à ramasser sur la paroi (vivres, gaz, O₂, une tous les ~110 m, visibles en rose fluo), blocs, verglas et chutes de pierres à esquiver, camps d'altitude qui servent de points de retour après une chute, radio météo (écran Game Boy) pour les prévisions du lendemain, dévers à franchir de profil (alterner les mains sous un toit de roche), grottes refuges (abri sans gaz, point de retour), 30 événements aléatoires. « Atelier » = l'éditeur de sprites intégré (taille libre jusqu'à 32×32, trames).
 
 ## Stack
 
-Vanilla JS statique (modules ES, aucune dépendance, aucun build), canvas 100×160 en pixel art. Hébergement GitHub Pages depuis `main` (racine). Icônes Tabler (webfont, CDN). Données locales (`localStorage`, préfixe `k2:`), exportables en JSON dans les réglages. Aucun Supabase.
+Vanilla JS statique (modules ES, aucune dépendance, aucun build), canvas 200×320 en pixel art (simulation en unités logiques 100×160, K = 2 pixels par mètre). Hébergement GitHub Pages depuis `main` (racine). Icônes Tabler (webfont, CDN). Données locales (`localStorage`, préfixe `k2:`), exportables en JSON dans les réglages. Aucun Supabase.
 
 ## Structure
 
 - `index.html`, `style.css` : page unique, dialogues natifs `<dialog>`.
-- `js/game.js` : simulation (altitude, énergie, chaleur, météo, temps) et rendu canvas.
-- `js/sprites.js` : palette de 5 couleurs (4 verts Game Boy + rose fluo), sprites par défaut, chargement (local > `sprites.json` du dépôt > défauts), publication GitHub.
-- `js/pixfont.js` : police pixel 3×5 (décor et écran radio). `js/editor.js` : éditeur de sprites. `js/main.js` : HUD, commandes, réglages, export/import.
+- `js/game.js` : simulation (altitude, énergie, chaleur, météo, temps), vue de face et vue de profil (dévers), grottes, rendu canvas. `js/events.js` : les 30 événements aléatoires.
+- `js/sprites.js` : palette de 5 couleurs (4 verts Game Boy + rose fluo), sprites `{w, h, px}` de taille libre, sprites par défaut, chargement (local > `sprites.json` du dépôt > défauts), publication GitHub.
+- `js/pixfont.js` : police pixel 3×5 (décor et écran radio). `js/editor.js` : éditeur de sprites (agrandir/réduire par côté, trames). `js/main.js` : HUD, commandes, réglages, export/import.
 - `version.json`, `CHANGELOG.md` : versions. `app-update.js`, `mobile.css`, `design-tokens.json` : synchronisés depuis le design system.
 - `sprites.json` : créé par le bouton « Publier les sprites » des réglages (absent tant que rien n'est publié, d'où un 404 inoffensif).
 
@@ -41,6 +41,9 @@ Règles propres aux jeux (à porter dans CONVENTIONS.md, voir proposition ci-des
 - Thème sombre unique (le jeu est nocturne) : pas de bascule clair/sombre.
 
 ## Pièges connus
+
+- Les sprites sont ancrés en bas au centre. L'ancien format de `sprites.json` / export (tableau de 64 valeurs, 8×8) est accepté et doublé en 16×16.
+- Les dévers (`OVERHANGS`) sont à altitude fixe ; `s.ov` / `s.ovDone` sont sauvegardés. Un événement ne peut pas faire sauter un dévers (`climb`).
 
 - Les modales sont des `<dialog>` : `app-update.js` les considère comme une saisie en cours et diffère le rechargement. La progression est sauvegardée toutes les 2 s et à `pagehide`.
 - Le toast est un `popover` pour passer au-dessus des `<dialog>` ouverts.

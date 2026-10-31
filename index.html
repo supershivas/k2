@@ -43,6 +43,7 @@
         </div>
       </div>
       <div class="msg" id="msg" role="status" aria-live="polite"></div>
+      <div class="event" id="event" role="status" aria-live="polite"><i class="ti ti-compass" id="ev-icon"></i><div><b id="ev-title"></b><span id="ev-text"></span></div></div>
 
       <section class="home" id="home">
         <h1>K2</h1>
@@ -58,7 +59,7 @@
       <button class="act" id="b-grip" type="button"><i class="ti ti-hand-grab"></i><span>Prise</span></button>
       <button class="act" id="b-eat" type="button"><i class="ti ti-meat"></i><span>Manger</span></button>
       <button class="act" id="b-o2" type="button"><i class="ti ti-bottle"></i><span>O₂</span></button>
-      <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span>Camper</span></button>
+      <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span id="b-camp-label">Camper</span></button>
       <button class="act" id="b-radio" type="button"><i class="ti ti-cloud-storm"></i><span>Météo</span></button>
     </div>
     <div class="steps">
@@ -93,28 +94,33 @@
   <dialog id="editor" class="modal modal-wide">
     <div class="modal-head"><h2>Éditeur de sprites</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
     <div class="tabs" id="ed-tabs" role="tablist"></div>
-    <div class="ed-main">
-      <div class="ed-board">
-        <canvas id="ed-canvas" width="8" height="8"></canvas>
+    <div class="ed-stage" id="ed-stage">
+      <div class="ed-sides ed-top"><button type="button" data-side="top" data-op="add" aria-label="Ajouter une ligne en haut"><i class="ti ti-plus"></i></button><button type="button" data-side="top" data-op="del" aria-label="Retirer la ligne du haut"><i class="ti ti-minus"></i></button></div>
+      <div class="ed-sides ed-left"><button type="button" data-side="left" data-op="add" aria-label="Ajouter une colonne à gauche"><i class="ti ti-plus"></i></button><button type="button" data-side="left" data-op="del" aria-label="Retirer la colonne de gauche"><i class="ti ti-minus"></i></button></div>
+      <div class="ed-board" id="ed-board">
+        <canvas id="ed-canvas" width="16" height="16"></canvas>
         <div class="ed-grid"></div>
       </div>
-      <div class="ed-side">
-        <div class="ed-preview"><canvas id="ed-prev1" width="8" height="8"></canvas><canvas id="ed-prev2" width="8" height="8"></canvas></div>
-        <div class="tools" id="ed-tools">
-          <button class="tool" data-tool="pencil" type="button" aria-label="Crayon" title="Crayon"><i class="ti ti-pencil"></i></button>
-          <button class="tool" data-tool="eraser" type="button" aria-label="Gomme" title="Gomme"><i class="ti ti-eraser"></i></button>
-          <button class="tool" data-tool="fill" type="button" aria-label="Pot de peinture" title="Pot de peinture"><i class="ti ti-bucket-droplet"></i></button>
-          <button class="tool" data-tool="picker" type="button" aria-label="Pipette" title="Pipette"><i class="ti ti-color-picker"></i></button>
-        </div>
-        <div class="tools">
-          <button class="tool" id="ed-undo" type="button" aria-label="Annuler" title="Annuler"><i class="ti ti-arrow-back-up"></i></button>
-          <button class="tool" id="ed-redo" type="button" aria-label="Rétablir" title="Rétablir"><i class="ti ti-arrow-forward-up"></i></button>
-          <button class="tool" id="ed-flip" type="button" aria-label="Miroir" title="Miroir"><i class="ti ti-flip-horizontal"></i></button>
-          <button class="tool" id="ed-clear" type="button" aria-label="Tout effacer" title="Tout effacer"><i class="ti ti-trash"></i></button>
-        </div>
-      </div>
+      <div class="ed-sides ed-right"><button type="button" data-side="right" data-op="add" aria-label="Ajouter une colonne à droite"><i class="ti ti-plus"></i></button><button type="button" data-side="right" data-op="del" aria-label="Retirer la colonne de droite"><i class="ti ti-minus"></i></button></div>
+      <div class="ed-sides ed-bottom"><button type="button" data-side="bottom" data-op="add" aria-label="Ajouter une ligne en bas"><i class="ti ti-plus"></i></button><button type="button" data-side="bottom" data-op="del" aria-label="Retirer la ligne du bas"><i class="ti ti-minus"></i></button></div>
+    </div>
+    <div class="ed-info">
+      <div class="ed-preview"><canvas id="ed-prev1" width="16" height="16"></canvas><canvas id="ed-prev2" width="16" height="16"></canvas></div>
+      <div class="ed-size"><span id="ed-size">16 × 16</span><small>Les + / − agrandissent ou réduisent chaque côté</small></div>
+    </div>
+    <div class="tools tools-8" id="ed-tools">
+      <button class="tool" data-tool="pencil" type="button" aria-label="Crayon" title="Crayon"><i class="ti ti-pencil"></i></button>
+      <button class="tool" data-tool="eraser" type="button" aria-label="Gomme" title="Gomme"><i class="ti ti-eraser"></i></button>
+      <button class="tool" data-tool="fill" type="button" aria-label="Pot de peinture" title="Pot de peinture"><i class="ti ti-bucket-droplet"></i></button>
+      <button class="tool" data-tool="picker" type="button" aria-label="Pipette" title="Pipette"><i class="ti ti-color-picker"></i></button>
+      <button class="tool" id="ed-undo" type="button" aria-label="Annuler" title="Annuler"><i class="ti ti-arrow-back-up"></i></button>
+      <button class="tool" id="ed-redo" type="button" aria-label="Rétablir" title="Rétablir"><i class="ti ti-arrow-forward-up"></i></button>
+      <button class="tool" id="ed-flip" type="button" aria-label="Miroir" title="Miroir"><i class="ti ti-flip-horizontal"></i></button>
+      <button class="tool" id="ed-clear" type="button" aria-label="Tout effacer" title="Tout effacer"><i class="ti ti-trash"></i></button>
     </div>
     <div class="palette" id="ed-palette"></div>
+    <h3 class="ed-title">Trames</h3>
+    <div class="patterns" id="ed-patterns"></div>
     <div class="ed-foot">
       <button class="btn" id="ed-reset" type="button"><i class="ti ti-restore"></i> Sprite d’origine</button>
       <button class="btn btn-primary" data-close type="button"><i class="ti ti-check"></i> Terminé</button>
