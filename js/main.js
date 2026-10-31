@@ -1,15 +1,15 @@
 // Cycle de vie du jeu : écran titre → partie → réglages ; plein écran, boucle à pas fixe, sauvegarde, debug.
-import { Game, SUMMIT } from './game.js?v=1.5.0';
-import { store, DEBUG } from './store.js?v=1.5.0';
-import { createLoop } from './lib/loop.js?v=1.5.0';
-import { createKeys, stopTypeahead, DIRECTIONS } from './lib/keys.js?v=1.5.0';
-import { lockBrowserGestures } from './lib/pointer.js?v=1.5.0';
-import { autosave } from './lib/save.js?v=1.5.0';
-import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from './lib/app-update.js?v=1.5.0';
-import { loadSprites, getToken, setToken, publishSprites, paintSprite, getSprite } from './sprites.js?v=1.5.0';
-import { initBag, openBag } from './bag.js?v=1.5.0';
-import { runPuzzle } from './puzzles.js?v=1.5.0';
-import { initEditor, openEditor } from './editor.js?v=1.5.0';
+import { Game, SUMMIT } from './game.js?v=1.6.0';
+import { store, DEBUG } from './store.js?v=1.6.0';
+import { createLoop } from './lib/loop.js?v=1.6.0';
+import { createKeys, stopTypeahead, DIRECTIONS } from './lib/keys.js?v=1.6.0';
+import { lockBrowserGestures } from './lib/pointer.js?v=1.6.0';
+import { autosave } from './lib/save.js?v=1.6.0';
+import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from './lib/app-update.js?v=1.6.0';
+import { loadSprites, getToken, setToken, publishSprites, paintSprite, getSprite } from './sprites.js?v=1.6.0';
+import { initBag, openBag } from './bag.js?v=1.6.0';
+import { runPuzzle } from './puzzles.js?v=1.6.0';
+import { initEditor, openEditor } from './editor.js?v=1.6.0';
 
 const $ = id => document.getElementById(id);
 
@@ -170,7 +170,7 @@ function play() {
   fit();
   game.playing = true;
   goFullscreen();
-  if (game.s.steps === 0) say('Alterne Gauche / Droite. Deux fois pareil : traverser', 'info');
+  if (game.s.steps === 0) say('Suis les prises roses : appuie du côté de la prochaine (main ou pied)', 'info');
 }
 
 function closeAllDialogs() {
@@ -204,6 +204,25 @@ function updateHud() {
   $('b-o2').classList.toggle('on', s.o2On);
   $('b-piton').classList.toggle('on', game.anchored);
   $('b-piton-label').textContent = `Piton ${s.pitonStock}`;
+}
+
+// Les boutons disent quel membre ils vont déplacer : la prochaine prise (main ou pied), ou l'esquive
+const hintCache = { L: '', R: '' };
+function updateMoveHints() {
+  const nm = game.playing ? game.nextMove() : null;
+  const th = game.playing ? game.threat : null;
+  for (const side of ['L', 'R']) {
+    const btn = $(side === 'L' ? 'b-left' : 'b-right');
+    let html = '', next = false;
+    if (th && th.away === side) { html = 'esquive'; next = true; }
+    else if (nm && nm.side === side) {
+      html = nm.kind === 'hand' ? '<i class="ti ti-hand-grab"></i> main' : '<i class="ti ti-shoe"></i> pied';
+      next = true;
+    }
+    if (hintCache[side] !== html) { hintCache[side] = html; $(side === 'L' ? 'h-left' : 'h-right').innerHTML = html; }
+    btn.classList.toggle('next', next);
+    btn.classList.toggle('dim', !next && !!(nm || th));
+  }
 }
 
 // ── Plein écran : le canvas couvre tout l'écran, à l'échelle entière ─────
@@ -268,6 +287,7 @@ const loop = createLoop({
     game.frameDt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
     game.render();
+    updateMoveHints();
     if (now - hudAt > 100) { hudAt = now; updateHud(); }
   },
 });
@@ -388,7 +408,7 @@ async function reloadFromStore() {
 
 // ── Mode debug : ?debug=1 (section 18) ───────────────────────────────────
 async function installDebugMode() {
-  const { installDebug } = await import('./lib/debug.js?v=1.5.0');
+  const { installDebug } = await import('./lib/debug.js?v=1.6.0');
   const places = { base: { a: 0 } };
   game.walks.forEach(w => { places[`pente${w.id + 1}`] = { a: w.a - 3 }; });
   game.puzzles.forEach(p => { places[`puzzle${p.id + 1}`] = { a: p.a - 3 }; });

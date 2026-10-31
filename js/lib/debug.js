@@ -8,7 +8,7 @@
    Dans le jeu :
      const params = new URLSearchParams(location.search)
      if (params.has('debug')) {
-       const { installDebug } = await import('./lib/debug.js?v=1.5.0')
+       const { installDebug } = await import('./lib/debug.js?v=1.6.0')
        installDebug({
          state: () => ({ x: hero.x, y: hero.y, zone, pv }),   // l'état lisible
          places: { plage: { x: 10, y: 40 }, maison: { x: 300, y: 80 } },

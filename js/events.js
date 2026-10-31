@@ -1,7 +1,7 @@
 // 30 événements aléatoires qui ponctuent l'ascension. Chacun a une condition d'apparition (`when`),
 // un effet (`run`) et le résumé de cet effet (`fx`) affiché dans le bandeau.
 // g = le jeu : g.s (état), g.weather, g.daylight, g.temperature, g.gain(), g.shake…
-import { SUMMIT } from './game.js?v=1.5.0';
+import { SUMMIT } from './game.js?v=1.6.0';
 
 const hourOf = g => (g.s.min % 1440) / 60;
 
@@ -65,8 +65,8 @@ export const EVENTS = [
     when: g => g.temperature < -12, run: g => g.gain('warmth', -14), bad: true },
   { icon: 'ti-battery-1', title: 'Le mur', text: 'Plus rien ne vient. Les jambes sont en plomb.', fx: '−15 énergie',
     when: g => g.s.alt > 2000, run: g => g.gain('energy', -15), bad: true },
-  { icon: 'ti-ghost', title: 'Hallucination', text: 'Une silhouette grimpe à côté de toi. Il n’y a personne.', fx: '−6 énergie, tu dévies',
-    when: g => g.s.alt > 7000, run: g => { g.gain('energy', -6); g.s.x = g.clampX(g.s.x + (g.rng() < 0.5 ? -14 : 14), g.s.alt); }, bad: true },
+  { icon: 'ti-ghost', title: 'Hallucination', text: 'Une silhouette grimpe à côté de toi. Il n’y a personne : tu perds une prise.', fx: '−6 énergie, −8 m',
+    when: g => g.s.alt > 7000, run: g => { g.gain('energy', -6); g.climb(-8); }, bad: true },
   { icon: 'ti-alert-circle', title: 'Fuite d’oxygène', text: 'Un joint siffle : la bouteille se vide plus vite.', fx: '−35 s d’oxygène',
     when: g => g.s.o2On && g.s.o2Sec > 40, run: g => { g.s.o2Sec -= 35; }, bad: true },
 ];

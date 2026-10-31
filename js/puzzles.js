@@ -3,8 +3,8 @@
 //  - « timing » : poser le pied au bon moment sur une vire étroite ;
 //  - « repair » : remettre le tuyau du réchaud dans le bon sens.
 // runPuzzle() rend { ok, quality } ou null si la fenêtre a été suspendue (retour à l'accueil).
-import { PALETTE as P } from './sprites.js?v=1.5.0';
-import { drawText } from './pixfont.js?v=1.5.0';
+import { PALETTE as P } from './sprites.js?v=1.6.0';
+import { drawText } from './pixfont.js?v=1.6.0';
 
 const $ = id => document.getElementById(id);
 const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];

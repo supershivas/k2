@@ -9,13 +9,13 @@ L'intention du jeu. La technique est dans `CLAUDE.md`. Les décisions de Jérôm
 ## Piliers
 
 1. **Épique plutôt que réaliste** : seul face aux éléments, on montre la démesure, pas les statistiques.
-2. **Deux boutons suffisent** : Gauche / Droite alternés font monter ; tout le reste est une réponse à la paroi.
+2. **Deux boutons suffisent** : Gauche / Droite saisissent la prise suivante (main ou pied, du côté indiqué) ; tout le reste est une réponse à la paroi.
 3. **Chaque ressource compte** : pitons, corde, gaz, oxygène sont en nombre limité et se choisissent.
 4. **La montagne change de point de vue** : de face, de profil sous un dévers, de profil sur une pente.
 
 ## La boucle de jeu
 
-- **Seconde** : un pas, un coup de vent à encaisser, une pierre à esquiver.
+- **Seconde** : lire la prochaine prise et appuyer du bon côté, un coup de vent à encaisser, une pierre à esquiver.
 - **Minute** : planter un piton, manger, passer un dévers ou une pente, résoudre un mini-puzzle.
 - **Partie** : une ascension, de 0 à 8 611 m, en plusieurs jours (camps, grottes, nuits).
 - **Entre deux parties** : XP, niveaux, talents, reliques de l'histoire de l'escalade.
@@ -30,6 +30,7 @@ L'intention du jeu. La technique est dans `CLAUDE.md`. Les décisions de Jérôm
 
 ## Les systèmes
 
+- **Montée par prises** (Jérôme, v1.6.0) : prises visibles, une par membre (main / pied, gauche / droite), parfois deux fois du même côté ; la traversée passe par des prises décalées ; un faux pas coûte de l'énergie.
 - **Pitons et corde** (Jérôme, v1.3.0) : le piton remplace la prise ; la corde, de longueur limitée, relie les pitons avec une vraie physique ; une chute ramène au dernier piton relié.
 - **Dévers et pentes douces** (v1.2.0, v1.3.0) : changement de point de vue ; on alterne les mains sous un toit, on maintient un bouton sur une pente.
 - **Grottes, événements** (v1.2.0) : refuges ; 30 événements aléatoires.

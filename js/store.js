@@ -1,7 +1,7 @@
 // Tout le stockage du jeu passe par ici (section 11 des conventions) : clés préfixées `k2:`,
 // entrées versionnées et migrées à la lecture, export / import JSON, jeton jamais exporté.
 // En mode debug (?debug=1), les clés changent (`k2:debug:…`) : la vraie partie reste intacte.
-import { createStore } from './lib/save.js?v=1.5.0';
+import { createStore } from './lib/save.js?v=1.6.0';
 
 export const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 

@@ -2,7 +2,7 @@
 // (index 0 à 4), -1 = transparent. Un sprite = { w, h, px }.
 // Priorité de chargement : édition locale > sprites.json du dépôt > défauts.
 
-import { store } from './store.js?v=1.5.0';
+import { store } from './store.js?v=1.6.0';
 
 export const PALETTE = ['#0F380F', '#306230', '#8BAC0F', '#9BBC0F', '#FF3CAC'];
 
@@ -10,8 +10,8 @@ export const MAX_SIZE = 32;
 export const REPO = 'supershivas/k2';
 
 export const SPRITE_DEFS = [
-  { id: 'heroA', label: 'Héros 1' },
-  { id: 'heroB', label: 'Héros 2' },
+  { id: 'heroT', label: 'Torse' },
+  { id: 'heroA', label: 'Chute' },
   { id: 'heroP1', label: 'Dévers 1' },
   { id: 'heroP2', label: 'Dévers 2' },
   { id: 'heroW1', label: 'Marche 1' },
@@ -29,17 +29,18 @@ export const SPRITE_DEFS = [
 
 // Un caractère = un index de palette, « . » = transparent.
 const ART = {
+  // Torse de dos, sans bras ni jambes : les quatre membres se dessinent jusqu'à leurs prises.
+  heroT: [
+    '................', '................', '......0000......', '.....011110.....',
+    '.....013310.....', '.....011110.....', '....004444400...', '....044444440...',
+    '....041221440...', '....041111440...', '....044444440...', '....004444400...',
+    '.....0444440....', '.....0044400....', '................', '................',
+  ],
   heroA: [
     '..33............', '..4....0000.....', '..4...011110....', '..44..013310....',
     '...4..011110....', '...44.0044400...', '....444444444.4.', '...4441221444.4.',
     '...44411114434.2', '....441111441.2.', '....444444444.1.', '....004444400.1.',
     '.....444.444....', '.....44...44....', '.....11...111...', '....111...1111..',
-  ],
-  heroB: [
-    '............33..', '.....0000....4..', '....011110...4..', '....013310..44..',
-    '....011110..4...', '...0044400.44...', '.4.444444444....', '.4.4441221444...',
-    '2.4344411114....', '.2.144111144....', '.1.444444444....', '.1.004444400....',
-    '....444.444.....', '....44...44.....', '...111...11.....', '..1111...111....',
   ],
   // Vue de profil : suspendu sous un toit de roche, le visage tourné vers la droite.
   heroP1: [

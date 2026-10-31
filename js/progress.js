@@ -1,7 +1,7 @@
 // Progression permanente : XP, niveaux, arbre de talents et reliques. Conservée entre les ascensions
 // (entrée `progress` du stockage, exportée avec les autres données).
 
-import { store } from './store.js?v=1.5.0';
+import { store } from './store.js?v=1.6.0';
 
 export const MAX_LEVEL = 10;
 

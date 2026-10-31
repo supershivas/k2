@@ -2,12 +2,13 @@
 // Simulation (altitude, ressources, météo, temps) en unités « logiques » (x de 0 à 100, altitude en mètres),
 // rendu pixel art en palette Game Boy à K fois cette définition : 1 m = K pixels.
 // Deux points de vue : de face sur la paroi, de profil sous un dévers.
-import { PALETTE as P, spriteCanvas } from './sprites.js?v=1.5.0';
-import { drawText } from './pixfont.js?v=1.5.0';
-import { pickEvent } from './events.js?v=1.5.0';
-import { createRng } from './lib/rng.js?v=1.5.0';
-import { Progress } from './progress.js?v=1.5.0';
-import { RELICS } from './relics.js?v=1.5.0';
+import { PALETTE as P, spriteCanvas } from './sprites.js?v=1.6.0';
+import { drawText } from './pixfont.js?v=1.6.0';
+import { pickEvent } from './events.js?v=1.6.0';
+import { createRng } from './lib/rng.js?v=1.6.0';
+import { limbSequence, STEP, LIMBS } from './holds.js?v=1.6.0';
+import { Progress } from './progress.js?v=1.6.0';
+import { RELICS } from './relics.js?v=1.6.0';
 
 export const K = 2;
 // Taille LOGIQUE du canvas : elle suit l'écran (plein écran, échelle entière, voir Game.resize).
@@ -277,6 +278,10 @@ export class Game {
     this.lastMode = 'face';
     this.evt = { next: 40, last: -1 };
     this.progress = new Progress();
+    this.holds = []; // prises de l'ascension (voir holds.js), allongées à la demande
+    this.limbPos = {}; // où sont les quatre membres, en mètres : { x, a }
+    this.dodge = 0; // écart latéral après une esquive, effacé à la prise suivante
+    this.errors = 0; // faux pas d'affilée
     this.hold = { L: false, R: false }; // boutons maintenus (marche)
     this.puzzles = [];
     this.walks = [];
@@ -311,7 +316,7 @@ export class Game {
     H = Math.max(160, Math.floor(devH / sc));
     OX = Math.floor((W - WORLD_W) / 2);
     OY = Math.floor((H - 160 * K) / 2);
-    const above = Math.ceil(((ctrlCss + 70) * dpr) / sc) + 8; // commandes + bulle de message
+    const above = Math.ceil(((ctrlCss + 70) * dpr) / sc) + 36; // commandes + bulle de message + pieds sous le torse
     HERO_Y = Math.max(Math.round(H * 0.45), Math.min(Math.round(H * 0.7), H - above));
     this.canvas.width = W; this.canvas.height = H;
     this.night.width = W; this.night.height = H;
@@ -330,6 +335,10 @@ export class Game {
     this.s = s;
     this.rng = createRng(s.seed);
     if (Number.isFinite(s.rngState)) this.rng.setState(s.rngState);
+    this.holds = [];
+    this.limbPos = {};
+    this.dodge = 0;
+    this.errors = 0;
     this.walks = this.makeWalks(s.seed);
     this.puzzles = this.makePuzzles(s.seed);
     s.puzzleDone = Array.isArray(s.puzzleDone) ? s.puzzleDone : [];
@@ -483,8 +492,7 @@ export class Game {
   relicSpot(r) {
     let a = r.a;
     if (this.nearHazardRaw(a, 30)) a += 45;
-    const L = this.leftBound(a) + 12, R = this.rightBound(a) - 12;
-    return { ...r, a, x: L + hash(r.a * 7 + 3) * Math.max(1, R - L) };
+    return { ...r, a, x: this.route(a) + (hash(r.a * 7 + 3) < 0.5 ? -1 : 1) * 9 };
   }
   relicsIn(a0, a1) {
     return RELICS.filter(r => !this.progress.hasRelic(r.id) && r.a >= a0 - 60 && r.a <= a1 + 60).map(r => this.relicSpot(r));
@@ -492,6 +500,74 @@ export class Game {
 
   nearHazardRaw(a, r) { return OVERHANGS.some(o => Math.abs(o.a - a) < r) || (this.walks || []).some(w => Math.abs(w.a - a) < r); }
   nearHazard(a, r) { return this.nearHazardRaw(a, r); }
+
+  // ── Parcours de prises ─────────────────────────────────────────────────
+  // Axe du parcours à l'altitude a : il serpente, et s'écarte des blocs et des plaques de glace (il les contourne).
+  route(a) {
+    const base = 50 + 14 * (vnoise(a / 60, 71) - 0.5) * 2;
+    let shift = 0;
+    for (let i = Math.max(1, Math.floor((a - 16) / BLOCK_STEP)); i <= Math.floor((a + 16) / BLOCK_STEP) + 1; i++) {
+      const ob = this.obstacle(i);
+      if (!ob) continue;
+      const need = ob.type === 'block' ? 13 : 16;
+      const d = base - ob.x;
+      if (Math.abs(d) >= need) continue;
+      const weight = smooth(clamp(1 - Math.abs(a - ob.a) / 14, 0, 1));
+      const push = (need - Math.abs(d)) * weight * (d >= 0 ? 1 : -1);
+      if (Math.abs(push) > Math.abs(shift)) shift = push;
+    }
+    const L = this.leftBound(a), R = this.rightBound(a);
+    const m = Math.min(14, (R - L) / 2 - 1);
+    return clamp(base + shift, L + m, R - m);
+  }
+
+  // La prise j : sa nature (main / pied, gauche / droite), son altitude et sa place sur la paroi.
+  holdAt(j) {
+    if (this.holds.length <= j) this.holds = limbSequence(this.s.seed, Math.max(j + 40, 64));
+    const h = this.holds[Math.max(0, j)];
+    const a = Math.max(0, j) * STEP;
+    return { j, ...h, a, x: this.route(a) + (h.side === 'L' ? -5 : 5) };
+  }
+  get holdIndex() { return Math.floor(this.s.alt / STEP + 1e-6); }
+  // La prochaine prise à saisir, et le bouton qui y mène (null hors de la paroi de face).
+  nextMove() {
+    const s = this.s;
+    if (s.ov || s.walk || this.fall || this.sleep || s.summit) return null;
+    return this.holdAt(this.holdIndex + 1);
+  }
+  // Où est chaque membre : la dernière prise prise par lui, au plus 16 prises en arrière.
+  limbTarget(limb) {
+    const k = this.holdIndex;
+    for (let j = k; j >= Math.max(0, k - 16); j--) {
+      const h = this.holdAt(j);
+      if (h.limb === limb) return { x: h.x, a: h.a };
+    }
+    return { x: this.route(0) + (limb[1] === 'L' ? -5 : 5), a: 0 };
+  }
+  // Les membres glissent vers leur prise : on les voit se déplacer un par un.
+  moveLimbs(dt) {
+    for (const limb of LIMBS) {
+      const t = this.limbTarget(limb);
+      const p = this.limbPos[limb];
+      if (!p || Math.abs(p.a - t.a) > 40 || Math.abs(p.x - t.x) > 30) this.limbPos[limb] = { ...t };
+      else { p.x += (t.x - p.x) * Math.min(1, dt * 16); p.a += (t.a - p.a) * Math.min(1, dt * 16); }
+    }
+  }
+  // Le torse : au milieu des quatre membres, un peu au-dessus.
+  bodyCenter() {
+    let x = 0, a = 0, n = 0;
+    for (const limb of LIMBS) { const p = this.limbPos[limb]; if (p) { x += p.x; a += p.a; n++; } }
+    return n ? { x: x / n, a: a / n + 3 } : { x: this.hx, a: this.view };
+  }
+
+  // Une chute de pierres menace : l'appui du côté opposé esquive.
+  get threat() {
+    const r = this.rock, s = this.s;
+    if (!(r.warn > 0) || s.ov || s.walk) return null;
+    const hx = s.x + this.dodge;
+    if (Math.abs(r.x - hx) > 9) return null;
+    return { away: r.x > hx ? 'L' : 'R' };
+  }
 
   // Blocs de roche et plaques de verglas, générés par tranche de 36 m.
   obstacle(i) {
@@ -502,21 +578,6 @@ export class Game {
     const type = hash(i * 17 + 9) < 0.55 ? 'block' : 'ice';
     return { a, x: L + hash(i * 17 + 7) * Math.max(1, R - L), type, w: type === 'block' ? 10 : 16 };
   }
-  blockBetween(a0, a1, x) {
-    for (let i = Math.floor(a0 / BLOCK_STEP); i <= Math.floor((a1 + 4) / BLOCK_STEP); i++) {
-      const ob = this.obstacle(i);
-      if (ob && ob.type === 'block' && ob.a > a0 && ob.a <= a1 + 3 && Math.abs(ob.x - x) < ob.w / 2 + 2) return ob;
-    }
-    return null;
-  }
-  iceAt(a, x) {
-    for (let i = Math.floor(a / BLOCK_STEP) - 1; i <= Math.floor(a / BLOCK_STEP) + 1; i++) {
-      const ob = this.obstacle(i);
-      if (ob && ob.type === 'ice' && Math.abs(ob.a - a) < 6 && Math.abs(ob.x - x) < ob.w / 2) return ob;
-    }
-    return null;
-  }
-
   // Ressources posées sur la paroi : une tous les ~110 m, à aller chercher.
   item(i) {
     if (i < 0 || i * ITEM_STEP + 90 > SUMMIT || hash(i * 29 + 1) > 0.85) return null;
@@ -526,7 +587,7 @@ export class Game {
     let type = r < 0.32 ? 'ration' : r < 0.5 ? 'gaz' : r < 0.68 ? 'piton' : r < 0.8 ? 'corde' : 'o2';
     if (type === 'o2' && a < 2000) type = 'ration';
     if (this.nearHazard(a, 12)) return null;
-    return { id: i, a, x: L + hash(i * 29 + 7) * Math.max(1, R - L), type };
+    return { id: i, a, x: this.route(a) + (hash(i * 29 + 7) < 0.5 ? -1 : 1) * (7 + hash(i * 29 + 9) * 4), type };
   }
 
   // Grottes refuges : une tous les ~650 m, à l'abri du vent et du froid.
@@ -535,8 +596,7 @@ export class Game {
     let a = i * CAVE_STEP + 120 + hash(i * 41 + 4) * 400;
     if (a > SUMMIT - 200) return null;
     if (this.nearHazard(a, 40)) a += 70;
-    const L = this.leftBound(a) + 16, R = this.rightBound(a) - 16;
-    return { id: i, a, x: L + hash(i * 41 + 6) * Math.max(1, R - L) };
+    return { id: i, a, x: this.route(a) + (hash(i * 41 + 6) < 0.5 ? -1 : 1) * (10 + hash(i * 41 + 8) * 3) };
   }
   cavesIn(a0, a1) {
     const out = [];
@@ -584,34 +644,35 @@ export class Game {
     this.frame ^= 1;
     this.lastStep = this.clock;
     if (s.ov) { this.stepProfile(side); return; }
-    if (side === this.lastSide) { // même côté : traversée latérale
-      s.x = this.clampX(s.x + (side === 'L' ? -5 : 5), s.alt);
-      s.energy = Math.max(0, s.energy - 0.5);
+
+    // Une pierre tombe vers toi : l'appui du côté opposé esquive (sans avancer)
+    const threat = this.threat;
+    if (threat && side === threat.away) {
+      this.dodge = side === 'L' ? -9 : 9;
+      s.energy = Math.max(0, s.energy - 1.5);
+      this.say('Esquive !', 'good');
       return;
     }
+
+    const next = this.holdAt(this.holdIndex + 1);
+    if (side !== next.side) { this.wrongStep(next); return; }
+
+    this.errors = 0;
+    this.dodge = 0;
     this.lastSide = side;
     const { wind, snow } = this.weather;
     const hypoxia = this.needsOxygen && !this.oxygenActive;
-    const ice = this.iceAt(s.alt, s.x);
-    const slow = (1 - 0.28 * snow - 0.25 * wind) * (1 - 0.2 * (1 - this.daylight)) * (hypoxia ? this.hyp.slow : 1) * (ice ? 0.5 : 1);
-    let next = Math.min(SUMMIT, s.alt + 4 * slow);
-    const hit = this.blockBetween(s.alt, next, s.x);
-    if (hit) {
-      next = Math.max(s.alt, hit.a - 4);
-      s.energy = Math.max(0, s.energy - 8);
-      this.shake = 0.25;
-      this.say('Bloc ! Traverse : même bouton deux fois', 'warn');
-    }
-    const roof = this.overhangBetween(s.alt, next);
-    const slope = roof ? null : this.walkBetween(s.alt, next);
-    const quiz = roof || slope || s.puzzle ? null : this.puzzleBetween(s.alt, next);
-    if (roof) next = roof.a;
-    if (slope) next = slope.a;
-    s.alt = next;
-    s.energy = Math.max(0, s.energy - 0.7 * (this.skill('end2') ? 0.88 : 1) * (1 + s.alt / 7000) * (hypoxia ? this.hyp.cost : 1) * (1 + 0.4 * wind) * (ice ? 1.8 : 1));
-    s.min += 1.8;
+    // Le mauvais temps ne raccourcit plus le pas : il coûte plus d'énergie et plus de temps par prise.
+    const slow = Math.max(0.25, (1 - 0.28 * snow - 0.25 * wind) * (1 - 0.2 * (1 - this.daylight)) * (hypoxia ? this.hyp.slow : 1));
+    const goal = Math.min(SUMMIT, next.a);
+    const roof = this.overhangBetween(s.alt, goal);
+    const slope = roof ? null : this.walkBetween(s.alt, goal);
+    const quiz = roof || slope || s.puzzle ? null : this.puzzleBetween(s.alt, goal);
+    s.alt = roof ? roof.a : slope ? slope.a : goal;
+    s.energy = Math.max(0, s.energy - 0.7 / slow * (this.skill('end2') ? 0.88 : 1) * (1 + s.alt / 7000) * (hypoxia ? this.hyp.cost : 1) * (1 + 0.4 * wind));
+    s.min += 1.8 / slow;
     s.steps++;
-    s.x = this.clampX(s.x, s.alt);
+    s.x = this.route(s.alt);
     if (roof) {
       s.ov = { id: roof.id, p: 0 };
       this.lastSide = null;
@@ -630,6 +691,24 @@ export class Game {
       this.gainXp(400);
       this.hooks.summit?.();
     }
+  }
+
+  // Mauvais côté : un faux pas coûte de l'énergie et du temps ; trois d'affilée font glisser.
+  wrongStep(next) {
+    const s = this.s;
+    this.errors++;
+    s.energy = Math.max(0, s.energy - 2.5);
+    s.min += 0.4;
+    this.shake = 0.12;
+    const what = next.kind === 'hand' ? 'main' : 'pied';
+    if (this.errors < 3) { this.say(`Mauvais côté : la prochaine prise est à ${next.side === 'L' ? 'gauche' : 'droite'} (${what})`, 'warn'); return; }
+    this.errors = 0;
+    if (this.anchored) { this.say('Tu glisses, mais le piton te retient', 'good'); return; }
+    s.alt = Math.max(0, s.alt - 12);
+    s.energy = Math.max(0, s.energy - 8);
+    this.shake = 0.4;
+    this.say('Trois faux pas : tu glisses de 12 m !', 'bad');
+    if (s.energy <= 0) this.startFall('Épuisement');
   }
 
   // Sous un dévers : une main après l'autre. Alterner Gauche / Droite fait avancer ; la même main deux fois ne sert à rien.
@@ -776,11 +855,11 @@ export class Game {
     const s = this.s;
     const roof = m > 0 ? OVERHANGS.find(o => !s.ovDone.includes(o.id) && o.a > s.alt) : null; // un dévers ne se saute pas
     s.alt = clamp(s.alt + m, 0, Math.min(SUMMIT - 30, roof ? roof.a - 1 : SUMMIT));
-    s.x = this.clampX(s.x, s.alt);
+    s.x = this.route(s.alt);
   }
   dropRock() {
     const r = this.rock;
-    r.x = this.clampX(this.s.x + (this.rng() - 0.5) * 24, this.s.alt);
+    r.x = this.clampX(this.s.x + (this.rng() - 0.5) * 30, this.s.alt);
     r.warn = this.skill('sur3') ? 2.1 : 1.5;
   }
 
@@ -793,7 +872,9 @@ export class Game {
     const s = this.s;
 
     this.view += (s.alt - this.view) * Math.min(1, dt * 10);
-    this.hx += (s.x - this.hx) * Math.min(1, dt * 14);
+    if (!s.ov && !s.walk && !this.fall && !this.sleep) s.x = this.route(s.alt);
+    this.hx += (s.x + this.dodge - this.hx) * Math.min(1, dt * 14);
+    this.moveLimbs(dt);
     this.floats = this.floats.filter(f => (f.t += dt) < 1.6);
 
     const mode = this.mode;
@@ -942,9 +1023,8 @@ export class Game {
           this.say('Rafale ! Tu balances sous le toit', 'bad');
           if (s.energy <= 0) this.startFall('Épuisement');
         } else {
-          s.x = this.clampX(s.x + gu.dir * 22, s.alt);
           s.energy = Math.max(0, s.energy - 12);
-          s.alt = Math.max(0, s.alt - 10);
+          s.alt = Math.max(0, s.alt - 12); // la rafale t'arrache des prises
           this.say('Rafale ! Tu es déporté', 'bad');
           if (s.energy <= 0) this.startFall('Épuisement');
         }
@@ -974,7 +1054,7 @@ export class Game {
       const y = lerp(-12, HERO_Y + 12, r.fall);
       if (!r.hit && y >= HERO_Y - 16) {
         r.hit = true;
-        if (Math.abs(r.x - s.x) <= 6) {
+        if (Math.abs(r.x - (s.x + this.dodge)) <= 6) {
           s.energy = Math.max(0, s.energy - (this.anchored ? 6 : 22));
           if (!this.anchored) s.alt = Math.max(0, s.alt - 12);
           this.shake = 0.5;
@@ -1165,6 +1245,31 @@ export class Game {
     }
   }
 
+  // Les prises visibles : la prochaine clignote en rose, les suivantes se lisent d'avance.
+  // Une main est un bec rond, un pied une vire plate.
+  drawHolds(g) {
+    if (this.s.ov || this.s.walk) return;
+    const k = this.holdIndex;
+    const blink = Math.floor(this.clock * 3) % 2;
+    for (let j = Math.max(1, k - 4); j <= k + 7; j++) {
+      const h = this.holdAt(j);
+      if (h.a > SUMMIT) break;
+      const x = Math.round(h.x * K), y = Math.round(this.ys(h.a));
+      if (y < -10 || y > H + 10) continue;
+      const ahead = j - k; // 1 = la prochaine
+      const col = ahead === 1 ? (blink ? P[4] : P[3]) : ahead > 1 && ahead <= 4 ? P[3] : P[2];
+      const grow = ahead === 1 ? 1 : 0;
+      g.fillStyle = P[0];
+      if (h.kind === 'hand') { // bec rond
+        g.fillRect(x - 5 - grow, y - 4 - grow, 11 + 2 * grow, 8 + 2 * grow);
+        g.fillStyle = col; g.fillRect(x - 4 - grow, y - 3 - grow, 9 + 2 * grow, 5 + 2 * grow); g.fillRect(x - 2, y - 4 - grow, 5, 1);
+      } else { // vire plate
+        g.fillRect(x - 8 - grow, y - 3 - grow, 17 + 2 * grow, 6 + 2 * grow);
+        g.fillStyle = col; g.fillRect(x - 7 - grow, y - 2 - grow, 15 + 2 * grow, 3 + 2 * grow);
+      }
+    }
+  }
+
   drawClouds(g) {
     const top = Math.round(this.ys(3300));
     const h = 700 * K;
@@ -1189,6 +1294,7 @@ export class Game {
       if (this.s.ovDone.includes(o.id)) { g.fillStyle = P[4]; g.fillRect(Math.round((L + R) / 2) - 1, y - 20, 2, 20); } // corde fixe
       else drawText(g, 'DEVERS', Math.round((L + R) / 2) - 12, y - 17, P[3]);
     }
+    this.drawHolds(g);
     for (let i = Math.max(1, Math.floor(lo / BLOCK_STEP)); i <= Math.floor(hi / BLOCK_STEP); i++) {
       const ob = this.obstacle(i);
       if (!ob) continue;
@@ -1245,8 +1351,7 @@ export class Game {
       drawText(g, 'Z', x + 6 + z * 6, HERO_Y - 28 - z * 6, P[4], 2);
       return;
     }
-    const grabbed = this.anchored ? 'heroA' : this.frame ? 'heroB' : 'heroA';
-    const sp = spriteCanvas(grabbed);
+    const sp = spriteCanvas('heroA');
     const top = HERO_Y - sp.height;
     if (this.fall) {
       const t = this.fall.t;
@@ -1257,14 +1362,46 @@ export class Game {
       g.restore();
       return;
     }
-    const bob = this.clock - this.lastStep < 0.12 ? -K : 0;
-    g.drawImage(sp, x - (sp.width >> 1), top + bob);
+    // Le torse entre les quatre membres, chacun accroché à sa prise
+    const c = this.bodyCenter();
+    const bx = Math.round(c.x * K - wind * K * Math.sin(this.clock * 6)), by = Math.round(this.ys(c.a));
+    const torso = spriteCanvas('heroT');
+    const tw = torso.width, th = torso.height;
+    const anchors = { hL: [-4, -th * 0.25], hR: [4, -th * 0.25], fL: [-2, th * 0.3], fR: [2, th * 0.3] };
+    for (const limb of LIMBS) {
+      const p = this.limbPos[limb];
+      if (!p) continue;
+      this.drawLimb(g, bx + anchors[limb][0], by + Math.round(anchors[limb][1]), Math.round(p.x * K), Math.round(this.ys(p.a)), limb);
+    }
+    g.drawImage(torso, bx - (tw >> 1), by - (th >> 1));
     if (this.gust.warn > 0 && Math.floor(this.clock * 8) % 2) {
       const dir = this.gust.dir;
       g.fillStyle = P[4];
-      for (let k = 0; k < 6; k++) g.fillRect(x + dir * (14 + k * 2), top + 6 + (k % 2) * 2, 2, 2);
-      g.fillRect(x + dir * 28, top + 4, 2, 8);
+      for (let k = 0; k < 6; k++) g.fillRect(bx + dir * (14 + k * 2), by - 4 + (k % 2) * 2, 2, 2);
+      g.fillRect(bx + dir * 28, by - 6, 2, 8);
     }
+  }
+
+  // Un membre : deux segments de l'épaule (ou de la hanche) jusqu'à la prise, le coude vers l'extérieur.
+  drawLimb(g, sx, sy, tx, ty, limb) {
+    const reach = 11;
+    let dx = tx - sx, dy = ty - sy;
+    const d = Math.hypot(dx, dy) || 1;
+    const stretch = Math.min(d, reach * 2);
+    const ex = sx + (dx / d) * (stretch / 2) + (limb[1] === 'L' ? -1 : 1) * Math.sqrt(Math.max(0, reach * reach - (stretch / 2) ** 2)) * 0.8;
+    const ey = sy + (dy / d) * (stretch / 2);
+    const hx = Math.round(sx + (dx / d) * stretch), hy = Math.round(sy + (dy / d) * stretch);
+    g.fillStyle = P[0];
+    this.plotLine(g, sx + 1, sy + 1, Math.round(ex) + 1, Math.round(ey) + 1);
+    this.plotLine(g, Math.round(ex) + 1, Math.round(ey) + 1, hx + 1, hy + 1);
+    g.fillStyle = P[4];
+    this.plotLine(g, sx, sy, Math.round(ex), Math.round(ey));
+    this.plotLine(g, Math.round(ex), Math.round(ey), hx, hy);
+    this.plotLine(g, sx + 1, sy, Math.round(ex) + 1, Math.round(ey));
+    this.plotLine(g, Math.round(ex) + 1, Math.round(ey), hx + 1, hy);
+    // la main (ou le pied) : un petit bloc clair cerné de sombre
+    g.fillStyle = P[0]; g.fillRect(hx - 2, hy - 2, 5, 5);
+    g.fillStyle = limb[0] === 'h' ? P[3] : P[2]; g.fillRect(hx - 1, hy - 1, 3, 3);
   }
 
   drawRock(g) {

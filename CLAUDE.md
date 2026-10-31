@@ -6,7 +6,7 @@
 
 ## Description
 
-Jeu de pixel art où l'on escalade le K2 (8 611 m). La montagne est vue de face, le héros minuscule grimpe en alternant Gauche / Droite (deux fois le même côté : traversée latérale). Épique plutôt que réaliste : seul face aux éléments. Intention et piliers : `DESIGN.md`.
+Jeu de pixel art où l'on escalade le K2 (8 611 m). La montagne est vue de face, le héros minuscule grimpe de prise en prise : chaque prise visible est pour un membre (main ou pied, gauche ou droite) et le bouton du même côté la saisit (parfois deux fois Gauche : pied puis main). Épique plutôt que réaliste : seul face aux éléments. Intention et piliers : `DESIGN.md`.
 
 - **Production** : https://supershivas.github.io/k2/ — **Aperçu** : https://supershivas.github.io/k2/apercu.html
 - **Genre** : survie / escalade, partie longue qui se reprend (une ascension = plusieurs jours de jeu), progression permanente (XP, talents, reliques).
@@ -37,7 +37,7 @@ Identique entre canvas, HUD, commandes, écran titre ; l'interface (réglages, f
 
 | Action | Clavier | Doigt / souris |
 |---|---|---|
-| Pas gauche / droite (maintenir : marcher sur une pente) | flèches, A/D (touche physique : Q/D en AZERTY) | boutons Gauche / Droite |
+| Saisir la prise suivante (Gauche / Droite ; maintenir : marcher sur une pente ; côté opposé à une pierre : esquive) | flèches, A/D (touche physique : Q/D en AZERTY) | boutons Gauche / Droite |
 | Piton | Espace, ↓, P | bouton Piton |
 | Manger / O₂ / Camper (ou grotte) | E / O / C | boutons |
 | Sac (inventaire, météo, carte, talents, reliques) | I, M (météo), K (carte) | bouton Sac |
@@ -55,7 +55,7 @@ Identique entre canvas, HUD, commandes, écran titre ; l'interface (réglages, f
 - `index.html`, `style.css` — canvas plein écran, écran titre, HUD, commandes, fenêtres natives `<dialog>` rattachées au body.
 - `js/main.js` — cycle de vie (titre → partie → réglages), plein écran (`fit`), boucle, commandes, sauvegarde, debug.
 - `js/game.js` — simulation et rendu (altitude, énergie, chaleur, météo, vues de face / de profil / de marche, cordes). `js/events.js` (30 événements), `js/relics.js` (10 reliques), `js/progress.js` (XP, talents).
-- `js/puzzles.js` (3 mini-puzzles), `js/bag.js` (sac), `js/store.js` (stockage), `js/sprites.js` + `js/editor.js` (sprites et atelier), `js/pixfont.js` (police pixel 3×5).
+- `js/holds.js` (suite de prises, pure), `js/puzzles.js` (3 mini-puzzles), `js/bag.js` (sac), `js/store.js` (stockage), `js/sprites.js` + `js/editor.js` (sprites et atelier), `js/pixfont.js` (police pixel 3×5).
 - `test/` — `node outils/test-run.mjs`. `apercu.html` — le jeu dans un cadre de téléphone.
 
 ## Vérifier et livrer
@@ -86,6 +86,8 @@ Debug : `?debug=1[&seed=42]` → `window.__jeu` (`state()`, `teleport('dever1' |
 | design-system des apps (`design-tokens.json`, `mobile.css`, Google Fonts, Tabler CDN) | 1.5.0 | un jeu suit game-system ; une police ou une icône chargée par CDN fait perdre l'identité hors ligne |
 
 ## Pièges connus
+
+- **Montée par prises** (v1.6.0) : `holds.js` donne pour chaque prise j un membre (`hL`, `fR`…) ; `game.holdAt(j)` y ajoute l'altitude (4 m par prise) et la place (`route(a)` ± 5). Le joueur appuie du côté de `nextMove()` ; un mauvais côté coûte 2,5 d'énergie, trois d'affilée font glisser de 12 m (sauf piton). L'altitude de la paroi est donc toujours un multiple de 4 m ; `s.x` suit `route(s.alt)` (plus de déplacement libre). Blocs et glace ne bloquent plus : le parcours les contourne. Objets, grottes et reliques sont posés à côté du parcours. `this.hold` est déjà pris (boutons maintenus) : la méthode s'appelle `holdAt`.
 
 - Gauche / Droite sont aussi « maintenus » (`game.hold`) : `releaseHolds()` à l'ouverture d'une modale, sinon le héros continue de marcher.
 - Le canvas est dimensionné d'après `#screen` en pixels physiques (`fit`), avec une échelle entière ; `Game.resize` reconstruit les décors de profil (ils font la taille du canvas). Le héros est placé au-dessus des commandes (`--ctrl-h`).

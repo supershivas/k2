@@ -128,6 +128,12 @@ body.paused .hud, body.paused .controls, body.paused .msg, body.paused .event { 
   background: var(--fluo); border: 0; border-radius: var(--radius-lg); color: var(--gb0); font-weight: 600; font-size: 1.05rem;
 }
 .step i { font-size: 1.8rem; }
+.step span { display: grid; gap: 1px; text-align: center; line-height: 1.1; }
+.step small { display: block; min-height: 1.1em; font-size: 0.72rem; font-weight: 500; }
+.step small i { font-size: 0.9rem; vertical-align: -0.1em; }
+.step.next { outline: 4px solid var(--gb0); outline-offset: -4px; animation: next-pulse 0.7s steps(2, jump-none) infinite; }
+.step.dim { filter: brightness(0.82); }
+@keyframes next-pulse { 50% { filter: brightness(1.12); } }
 .step:active { filter: brightness(0.85); }
 
 /* Modales */

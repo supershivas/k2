@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0 — 2026-10-31
+- La montée suit des prises visibles : main ou pied, à gauche ou à droite, parfois deux fois du même côté
+- Les boutons Gauche / Droite indiquent le membre à bouger ; un faux pas coûte de l'énergie, trois font glisser
+- Le parcours contourne blocs et glace ; une pierre qui tombe s'esquive par le côté opposé
+
 ## 1.5.0 — 2026-10-31
 - Le jeu passe en plein écran, sans en-tête ni bandes, sur téléphone comme sur ordinateur (installable)
 - Le héros n'a plus de fond sombre derrière lui

@@ -1,6 +1,6 @@
 // Éditeur de sprites de taille libre : crayon, gomme, pot de peinture, pipette, miroir, annuler/rétablir,
 // agrandissement ou réduction par chaque côté, et trames (damier, hachures, fusain…).
-import { PALETTE, MAX_SIZE, SPRITE_DEFS, getSprite, setSprite, resetSprite, paintSprite } from './sprites.js?v=1.5.0';
+import { PALETTE, MAX_SIZE, SPRITE_DEFS, getSprite, setSprite, resetSprite, paintSprite } from './sprites.js?v=1.6.0';
 
 const $ = id => document.getElementById(id);
 const MIN_SIZE = 2;
@@ -181,7 +181,7 @@ function refreshUi() {
 }
 
 function render() {
-  const sibling = { heroA: 'heroB', heroB: 'heroA', heroP1: 'heroP2', heroP2: 'heroP1', heroW1: 'heroW2', heroW2: 'heroW1' }[current];
+  const sibling = { heroP1: 'heroP2', heroP2: 'heroP1', heroW1: 'heroW2', heroW2: 'heroW1' }[current];
   for (const [id, data] of [['ed-prev1', sp], ['ed-prev2', sibling ? getSprite(sibling) : sp]]) {
     const c = $(id);
     if (c.width !== data.w || c.height !== data.h) { c.width = data.w; c.height = data.h; }
