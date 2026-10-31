@@ -1,56 +1,99 @@
-@.claude/conventions.md
+@.claude/conventions-jeu.md
 
 # K2
 
+<!-- Ne décrit QUE le jeu actuel (section 15 des conventions). Détail des règles : .claude/conventions-detail.md. -->
+
 ## Description
 
-Jeu de pixel art où l'on escalade le K2 (8 611 m). La montagne est vue de face, le héros minuscule grimpe en alternant Gauche / Droite (deux fois le même côté : traversée latérale). Épique plutôt que réaliste : seul face aux éléments et à la falaise. Pas de sous-titre ni de baseline sous le nom du jeu.
+Jeu de pixel art où l'on escalade le K2 (8 611 m). La montagne est vue de face, le héros minuscule grimpe en alternant Gauche / Droite (deux fois le même côté : traversée latérale). Épique plutôt que réaliste : seul face aux éléments. Intention et piliers : `DESIGN.md`.
 
-- Catégorie : **secondaire** (socle seulement ; les fonctionnalités avancées ne se développent que sur demande).
-- Cible : **mobile et bureau** (tactile et clavier).
-- Production : https://supershivas.github.io/k2/
+- **Production** : https://supershivas.github.io/k2/ — **Aperçu** : https://supershivas.github.io/k2/apercu.html
+- **Genre** : survie / escalade, partie longue qui se reprend (une ascension = plusieurs jours de jeu), progression permanente (XP, talents, reliques).
+- **Vue et rendu** : de face sur la paroi, de profil sous un dévers et sur les pentes douces ; canvas 2D pixel art.
+- **Cible** : téléphone en portrait (principale), bureau ; plein écran partout (sans en-tête ni bandes), installable (manifest, `display: standalone`).
+- **Session** : une ascension se sauvegarde toute seule et se reprend.
+- **Steam** : navigateur seulement.
+- Pas de sous-titre sous le nom (section 3).
 
-Gameplay : cycle jour/nuit, vent (rafales qui déportent, à encaisser en maintenant « Prise »), neige, froid, oxygène au-dessus de 6 500 m, ressources à ramasser sur la paroi (vivres, gaz, O₂, pitons, corde, une tous les ~110 m, visibles en rose fluo), blocs, verglas et chutes de pierres à esquiver, camps d'altitude, grottes et pitons reliés par la corde qui servent de points de retour après une chute, pitons (stock limité, bouton « Piton » : ancre contre les rafales) et corde de longueur limitée simulée par Verlet (pend, ondule au vent), sac (inventaire, météo avec la ligne de l'heure, carte, écrans Game Boy), pentes douces de profil à marcher en maintenant Gauche/Droite (tirées au hasard par ascension, `s.seed`), dévers à franchir de profil (alterner les mains sous un toit de roche), grottes refuges (abri sans gaz, point de retour), 30 événements aléatoires, 5 mini-puzzles par ascension (lire la paroi, équilibre, réchaud ; `js/puzzles.js`), 10 reliques de l'histoire de l'escalade (`js/relics.js`), XP / niveaux 1 à 10 et arbre de 12 talents en 3 branches (`js/progress.js`), conservés entre les ascensions. « Atelier » = l'éditeur de sprites intégré (taille libre jusqu'à 32×32, trames).
+### Palette (source : `PALETTE`, `js/sprites.js` ; variables `--gb0..3`, `--fluo` dans `style.css`)
+
+| Index | Valeur | Rôle |
+|---|---|---|
+| 0 `--gb0` | `#0F380F` | le plus sombre : contours, fonds de HUD |
+| 1 `--gb1` | `#306230` | roche, ombres |
+| 2 `--gb2` | `#8BAC0F` | roche claire, jauges |
+| 3 `--gb3` | `#9BBC0F` | neige, ciel, texte |
+| 4 `--fluo` | `#FF3CAC` | ce avec quoi on interagit : héros, ressources, commandes |
+
+Identique entre canvas, HUD, commandes, écran titre ; l'interface (réglages, fenêtres, atelier) reprend la même palette.
+
+### Échelle
+
+- Canvas à l'**échelle entière** qui couvre tout l'écran : la face fait toujours 200 px de large (100 m, `K = 2` px par mètre), centrée ; le reste de la largeur et de la hauteur prolonge le ciel et la roche (`Game.resize`). Taille logique visée ≈ 200 × 320, jusqu'à 720 de large.
+- Héros : 16 × 16 px (≈ 8 m). Un bloc ≈ 28 × 18, une tente 16 × 16, une grotte 32 × 24.
+
+### Commandes
+
+| Action | Clavier | Doigt / souris |
+|---|---|---|
+| Pas gauche / droite (maintenir : marcher sur une pente) | flèches, A/D (touche physique : Q/D en AZERTY) | boutons Gauche / Droite |
+| Piton | Espace, ↓, P | bouton Piton |
+| Manger / O₂ / Camper (ou grotte) | E / O / C | boutons |
+| Sac (inventaire, météo, carte, talents, reliques) | I, M (météo), K (carte) | bouton Sac |
+| Réglages | — | roue crantée en haut à droite |
 
 ## Stack
 
-Vanilla JS statique (modules ES, aucune dépendance, aucun build), canvas 200×320 en pixel art (simulation en unités logiques 100×160, K = 2 pixels par mètre). Hébergement GitHub Pages depuis `main` (racine). Icônes Tabler (webfont, CDN). Données locales (`localStorage`, préfixe `k2:`), exportables en JSON dans les réglages. Aucun Supabase.
+- Vanilla JS, modules ES, sans build ni dépendance ; GitHub Pages depuis `main` (racine, avec `.nojekyll` pour servir `CHANGELOG.md`).
+- Modules de game-system dans `js/lib/` (suivis par `scripts/sync-game-system.sh` à chaque session) : `app-update`, `keys`, `pointer`, `loop`, `rng`, `save`, `debug`, `game.css`. Outils dans `outils/`.
+- Polices et icônes **auto-hébergées** : `fonts/` (DM Mono, licence OFL), `css/icons.css` (Tabler outline, masques SVG). Rien n'est chargé depuis un CDN.
+- Données : entrées `k2:save`, `k2:records`, `k2:progress`, `k2:sprites` (versionnées, `js/store.js`), `k2:github-token` (jamais exporté) ; en `?debug=1` : préfixe `k2:debug:`. Export / import JSON dans les réglages (les anciens exports `app: 'k2'` s'importent encore).
 
 ## Structure
 
-- `index.html`, `style.css` : page unique, dialogues natifs `<dialog>`.
-- `js/game.js` : simulation (altitude, énergie, chaleur, météo, temps), vue de face et vue de profil (dévers), grottes, rendu canvas. `js/events.js` : les 30 événements aléatoires. `js/bag.js` : le sac (inventaire, météo, carte, talents, reliques).
-- `js/sprites.js` : palette de 5 couleurs (4 verts Game Boy + rose fluo), sprites `{w, h, px}` de taille libre, sprites par défaut, chargement (local > `sprites.json` du dépôt > défauts), publication GitHub.
-- `js/pixfont.js` : police pixel 3×5 (décor et écran radio). `js/editor.js` : éditeur de sprites (agrandir/réduire par côté, trames). `js/main.js` : HUD, commandes, réglages, export/import.
-- `version.json`, `CHANGELOG.md` : versions. `app-update.js`, `mobile.css`, `design-tokens.json` : synchronisés depuis le design system.
-- `sprites.json` : créé par le bouton « Publier les sprites » des réglages (absent tant que rien n'est publié, d'où un 404 inoffensif).
+- `index.html`, `style.css` — canvas plein écran, écran titre, HUD, commandes, fenêtres natives `<dialog>` rattachées au body.
+- `js/main.js` — cycle de vie (titre → partie → réglages), plein écran (`fit`), boucle, commandes, sauvegarde, debug.
+- `js/game.js` — simulation et rendu (altitude, énergie, chaleur, météo, vues de face / de profil / de marche, cordes). `js/events.js` (30 événements), `js/relics.js` (10 reliques), `js/progress.js` (XP, talents).
+- `js/puzzles.js` (3 mini-puzzles), `js/bag.js` (sac), `js/store.js` (stockage), `js/sprites.js` + `js/editor.js` (sprites et atelier), `js/pixfont.js` (police pixel 3×5).
+- `test/` — `node outils/test-run.mjs`. `apercu.html` — le jeu dans un cadre de téléphone.
 
-## Conventions jeux
+## Vérifier et livrer
 
-Règles propres aux jeux (à porter dans CONVENTIONS.md, voir proposition ci-dessous) :
+```bash
+node outils/test-run.mjs        # progression, stockage, hasard à graine
+node outils/captures.mjs --clic "#btn-play"   # téléphone + bureau, sans erreur console
+node outils/audit-ecran.mjs     # débordement, cibles
+node outils/stamp-version.mjs   # après chaque changement de version.json
+```
 
-- Jamais de sous-titre ni de baseline sous le nom d'un jeu ou d'une app : ni en en-tête, ni sur l'écran d'accueil.
-- Palette du jeu limitée et déclarée dans le `CLAUDE.md`, identique entre canvas, HUD et commandes. En-têtes, réglages et modales gardent les tokens.
-- Commandes jouables au pouce (zones de 44 px minimum) et au clavier.
-- Le jeu se met en pause quand une modale est ouverte et se sauvegarde tout seul (pas de perte à la mise à jour automatique).
+Debug : `?debug=1[&seed=42]` → `window.__jeu` (`state()`, `teleport('dever1' | 'pente1' | 'puzzle1' | 'base')`, `timeScale(n)`, `game`).
 
 ## Exceptions aux conventions
 
-- La palette du jeu (4 verts Game Boy + rose fluo `#FF3CAC`) est volontairement hors tokens : canvas, HUD, boutons de commande et accueil. Les en-têtes, réglages et modales utilisent les tokens. `PALETTE` (js/sprites.js) et les variables `--gb0..3`, `--fluo` (style.css) doivent rester identiques.
-- Le jeton GitHub (réglages) est saisi par l'utilisateur et stocké uniquement dans son navigateur (`localStorage`), jamais commité. Il sert à écrire `sprites.json` via l'API contents.
-- Thème sombre unique (le jeu est nocturne) : pas de bascule clair/sombre.
+- **Écran de l'atelier et du sac** : l'atelier est une fenêtre du jeu, pas une page `atelier.html` (section 17), et n'utilise pas `modules/pixel-editor.js` ; coque grise de Game Boy (`.gb-body`) et damier de transparence hors palette. Coût : voir `ROADMAP.md`.
+- **`Game` mêle règles et dessin** (section 12) : la simulation et le rendu vivent dans `js/game.js`. Coût : les règles ne se testent pas sans canvas. Voir `ROADMAP.md`.
+- Constantes d'équilibrage dans le code, pas dans `data/` (section 12). Même coût, même renvoi.
+- Pas de labo (facultatif, voir `ROADMAP.md`), pas de son, pas de manette, pas de workflow Pages avec tests avant publication (le dépôt publie directement depuis `main`).
+
+## Ce qui a été retiré
+
+| Quoi | Version | Pourquoi |
+|---|---|---|
+| En-tête (nom cliquable + roue) et cadre du jeu | 1.5.0 | un jeu plein écran n'a ni en-tête ni bandes ; la roue est sur l'écran titre et dans le HUD |
+| Prise (bouton maintenu) | 1.3.0 | remplacée par les pitons, en stock limité |
+| Radio météo | 1.3.0 | remplacée par le sac (inventaire, météo, carte) |
+| design-system des apps (`design-tokens.json`, `mobile.css`, Google Fonts, Tabler CDN) | 1.5.0 | un jeu suit game-system ; une police ou une icône chargée par CDN fait perdre l'identité hors ligne |
 
 ## Pièges connus
 
-- La progression (`k2:progress` : XP, talents, reliques) est séparée de la partie en cours (`k2:save`) : « Nouvelle ascension » la conserve. Une nouvelle ascension démarre avec `game.freshState()` (bonus de talents), jamais `newState()`.
-- Le puzzle est une `<dialog data-sticky>` (ni Échap ni clic hors fenêtre) ; fermée par l'accueil, elle reste en attente (`s.puzzle`) et se rouvre au retour dans le jeu.
-
-- Gauche/Droite sont aussi « maintenus » (`game.hold`) : réinitialiser `hold` à l'ouverture d'une modale, sinon le héros continue de marcher.
-- La corde n'est pas sauvegardée : seuls `s.pitons`, `s.rope` et `s.live` le sont ; `syncRopes()` la reconstruit au chargement.
-
-- Les sprites sont ancrés en bas au centre. L'ancien format de `sprites.json` / export (tableau de 64 valeurs, 8×8) est accepté et doublé en 16×16.
-- Les dévers (`OVERHANGS`) sont à altitude fixe ; `s.ov` / `s.ovDone` sont sauvegardés. Un événement ne peut pas faire sauter un dévers (`climb`).
-
-- Les modales sont des `<dialog>` : `app-update.js` les considère comme une saisie en cours et diffère le rechargement. La progression est sauvegardée toutes les 2 s et à `pagehide`.
-- Le toast est un `popover` pour passer au-dessus des `<dialog>` ouverts.
-- Les icônes Tabler viennent d'un CDN : sans réseau, elles n'apparaissent pas (le jeu reste jouable).
+- Gauche / Droite sont aussi « maintenus » (`game.hold`) : `releaseHolds()` à l'ouverture d'une modale, sinon le héros continue de marcher.
+- Le canvas est dimensionné d'après `#screen` en pixels physiques (`fit`), avec une échelle entière ; `Game.resize` reconstruit les décors de profil (ils font la taille du canvas). Le héros est placé au-dessus des commandes (`--ctrl-h`).
+- Les sprites sont ancrés en bas au centre, sur fond transparent (le héros n'a plus de boîte sombre). L'ancien format 8×8 (tableau de 64) est accepté et doublé en 16×16.
+- Les dévers (`OVERHANGS`) sont à altitude fixe ; les pentes à marcher et les puzzles se tirent de `s.seed`. `s.ov`, `s.walk`, `s.puzzle` sont sauvegardés. Un événement ne peut pas faire sauter un dévers (`climb`).
+- Tout le hasard des règles passe par `game.rng` (état dans `s.rngState`) ; le décor (flocons, tremblement) par `game.fx`, non sauvegardé. Jamais `Math.random`.
+- La corde n'est pas sauvegardée : `s.pitons`, `s.rope`, `s.live` le sont ; `syncRopes()` la reconstruit.
+- La progression (`k2:progress`) est séparée de la partie : « Nouvelle ascension » la conserve. Une ascension démarre avec `game.freshState(seed)` (bonus de talents).
+- Le puzzle est une `<dialog data-sticky>` : ni Échap ni clic dehors ; fermée par l'accueil, elle reste en attente (`s.puzzle`).
+- Le toast est un `popover` pour passer au-dessus des `<dialog>` ouverts. Les `<dialog>` ouverts diffèrent la mise à jour automatique.
+- `sprites.json` (`{}` tant que rien n'est publié) est servi pour éviter un 404 ; « Publier les sprites » le remplace.

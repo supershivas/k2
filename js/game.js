@@ -2,17 +2,23 @@
 // Simulation (altitude, ressources, météo, temps) en unités « logiques » (x de 0 à 100, altitude en mètres),
 // rendu pixel art en palette Game Boy à K fois cette définition : 1 m = K pixels.
 // Deux points de vue : de face sur la paroi, de profil sous un dévers.
-import { PALETTE as P, spriteCanvas } from './sprites.js';
-import { drawText } from './pixfont.js';
-import { pickEvent } from './events.js';
-import { Progress } from './progress.js';
-import { RELICS } from './relics.js';
+import { PALETTE as P, spriteCanvas } from './sprites.js?v=1.5.0';
+import { drawText } from './pixfont.js?v=1.5.0';
+import { pickEvent } from './events.js?v=1.5.0';
+import { createRng } from './lib/rng.js?v=1.5.0';
+import { Progress } from './progress.js?v=1.5.0';
+import { RELICS } from './relics.js?v=1.5.0';
 
 export const K = 2;
-export const W = 100 * K;
-export const H = 160 * K;
+// Taille LOGIQUE du canvas : elle suit l'écran (plein écran, échelle entière, voir Game.resize).
+// La face du K2, elle, mesure toujours 200 px de large (100 m) : OX / OY la centrent.
+export let W = 100 * K;
+export let H = 160 * K;
+const WORLD_W = 100 * K;
+let OX = 0, OY = 0;
+const TW = 720; // largeur des textures : au moins celle du plus large canvas
 export const SUMMIT = 8611;
-const HERO_Y = 116 * K; // pieds du héros à l'écran
+let HERO_Y = 116 * K; // pieds du héros à l'écran (au-dessus des commandes, voir Game.resize)
 const TILE_H = 256 * K;
 const OXYGEN_ALT = 6500;
 const BOTTLE_SECONDS = 90;
@@ -29,6 +35,8 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = t => t * t * (3 - 2 * t);
 const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const bay = (x, y) => BAYER[((y % 4) + 4) % 4][((x % 4) + 4) % 4]; // sûr pour les coordonnées négatives
+const mod = (a, n) => ((a % n) + n) % n;
 
 function hash(n) {
   n = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -46,7 +54,7 @@ function vnoise(x, seed = 0) {
 const hexToRgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
 const RGB = P.map(hexToRgb);
 
-export function newState() {
+export function newState(seed = 1) {
   return {
     alt: 0, x: 50, energy: 100, warmth: 100,
     food: 6, gas: 3, o2: 1, o2Sec: 0, o2On: false,
@@ -54,7 +62,7 @@ export function newState() {
     camps: [], items: [], falls: 0, steps: 0, summit: false,
     ov: null, ovDone: [], // dévers en cours { id, p } et dévers franchis
     walk: null, walkDone: [], // pente à marcher en cours { id, p } et pentes franchies
-    seed: Math.floor(Math.random() * 1e9), // tirage des pentes de cette ascension
+    seed, // graine de l'ascension : pentes, puzzles, événements, rafales
     pitonStock: 5, pitons: [], // pitons dans le sac et pitons plantés { a, x, len, linked, ov?, p? }
     rope: 300, live: 0, // corde totale (m) et longueur déroulée entre le dernier piton et le héros
     top: 0, topXp: 0, // plus haute altitude atteinte (carte du sac) et part déjà payée en XP
@@ -131,22 +139,22 @@ class Rope {
 // Textures de la paroi : roche sombre, roche claire, glace. Tramées et ombrées côté gauche (lumière à droite).
 function makeTile(zone, seed) {
   const c = document.createElement('canvas');
-  c.width = W; c.height = TILE_H;
+  c.width = TW; c.height = TILE_H;
   const g = c.getContext('2d');
   const base = zone === 2 ? P[2] : P[1];
   const mark = zone === 2 ? P[3] : P[2];
   const dark = zone === 2 ? P[1] : P[0];
-  g.fillStyle = base; g.fillRect(0, 0, W, TILE_H);
+  g.fillStyle = base; g.fillRect(0, 0, TW, TILE_H);
   let n = seed;
   const r = () => hash(n++);
   // Strates : bandes horizontales irrégulières, avec un liseré clair dessous
   const strata = zone === 2 ? 14 : 26;
   for (let i = 0; i < strata; i++) {
-    let x = Math.floor(r() * W), y = Math.floor(r() * TILE_H);
+    let x = Math.floor(r() * TW), y = Math.floor(r() * TILE_H);
     const len = 20 + Math.floor(r() * 70);
     for (let k = 0; k < len; k++) {
-      g.fillStyle = dark; g.fillRect(x % W, y % TILE_H, 1, 1);
-      g.fillStyle = mark; g.fillRect(x % W, (y + 1) % TILE_H, 1, 1);
+      g.fillStyle = dark; g.fillRect(x % TW, y % TILE_H, 1, 1);
+      g.fillStyle = mark; g.fillRect(x % TW, (y + 1) % TILE_H, 1, 1);
       x++;
       if (r() < 0.2) y += r() < 0.5 ? -1 : 1;
     }
@@ -156,11 +164,11 @@ function makeTile(zone, seed) {
   for (let i = 0; i < dots; i++) {
     g.fillStyle = r() < (zone === 2 ? 0.55 : 0.18) ? mark : dark;
     const w = zone === 2 ? 2 + Math.floor(r() * 12) : 2 + Math.floor(r() * 7);
-    g.fillRect(Math.floor(r() * W), Math.floor(r() * TILE_H), w, 1 + Math.floor(r() * 2));
+    g.fillRect(Math.floor(r() * TW), Math.floor(r() * TILE_H), w, 1 + Math.floor(r() * 2));
   }
   // Couloirs et arêtes : longues traces verticales
   for (let i = 0; i < 16; i++) {
-    let x = Math.floor(r() * W), y = Math.floor(r() * TILE_H);
+    let x = Math.floor(r() * TW), y = Math.floor(r() * TILE_H);
     const len = 80 + r() * 220;
     for (let k = 0; k < len; k++) {
       g.fillStyle = dark; g.fillRect(x, y % TILE_H, 1, 1);
@@ -170,16 +178,16 @@ function makeTile(zone, seed) {
     }
   }
   // Ombre tramée à gauche, lumière tramée à droite
-  const img = g.getImageData(0, 0, W, TILE_H);
+  const img = g.getImageData(0, 0, TW, TILE_H);
   const d = img.data;
   const idxOf = (R, G, B) => RGB.findIndex(([r2, g2, b2]) => r2 === R && g2 === G && b2 === B);
   for (let y = 0; y < TILE_H; y++) {
-    for (let x = 0; x < W; x++) {
-      const t = (x - W / 2) / (W / 2);
+    for (let x = 0; x < TW; x++) {
+      const t = clamp((x - TW / 2) / 100, -1, 1);
       const shade = clamp((-t - 0.05) * 0.95, 0, 0.7);
       const light = clamp((t - 0.25) * 0.6, 0, 0.4);
       const b = BAYER[y % 4][x % 4] / 16;
-      const o = (y * W + x) * 4;
+      const o = (y * TW + x) * 4;
       const ci = idxOf(d[o], d[o + 1], d[o + 2]);
       if (ci < 0) continue;
       let ni = ci;
@@ -196,11 +204,11 @@ function makeTile(zone, seed) {
 function makeCloudStrip() {
   const c = document.createElement('canvas');
   const h = 700 * K;
-  c.width = W; c.height = h;
+  c.width = TW; c.height = h;
   const g = c.getContext('2d');
   for (let y = 0; y < h; y++) {
     const cover = Math.max(0, 1 - Math.abs(y - h / 2) / (h / 2)) ** 0.7;
-    for (let x = 0; x < W; x++) {
+    for (let x = 0; x < TW; x++) {
       const v = hash(Math.floor(x / 6) * 977 + Math.floor(y / 3) * 31 + 5);
       if (v < cover * 0.17) { g.fillStyle = v < cover * 0.06 ? P[3] : P[2]; g.fillRect(x, y, 1, 1); }
     }
@@ -279,6 +287,9 @@ export class Game {
     this.walkAnim = 0;
     this.gust = { next: 12, warn: 0, dir: 1 };
     this.rock = { next: 14, warn: 0, fall: 0, x: 50, hit: false };
+    this.rng = createRng(1); // le hasard des règles : sauvegardé avec la partie
+    this.fx = createRng('k2-fx'); // le hasard du décor (flocons, tremblement) : jamais sauvegardé
+    this.frameDt = 1 / 60;
     this.floats = [];
     this.flakes = Array.from({ length: 170 }, (_, i) => ({ x: hash(i) * W, y: hash(i + 500) * H, v: 0.6 + hash(i + 900) }));
     this.streaks = Array.from({ length: 14 }, (_, i) => ({ x: hash(i + 40) * W, y: hash(i + 80) * H, l: (8 + hash(i + 120) * 14) * K }));
@@ -291,6 +302,23 @@ export class Game {
     this.night.width = W; this.night.height = H;
   }
 
+  // Plein écran : le canvas couvre tout l'écran, avec une échelle ENTIÈRE (pixels nets, aucune bande).
+  // devW / devH en pixels physiques ; ctrlCss = hauteur des commandes (CSS), pour que le héros reste au-dessus.
+  resize(devW, devH, dpr, ctrlCss = 0) {
+    let sc = Math.max(1, Math.round(Math.min(devW / 200, devH / 320)));
+    sc = Math.max(sc, Math.ceil(devW / TW));
+    W = Math.max(100, Math.floor(devW / sc));
+    H = Math.max(160, Math.floor(devH / sc));
+    OX = Math.floor((W - WORLD_W) / 2);
+    OY = Math.floor((H - 160 * K) / 2);
+    const above = Math.ceil(((ctrlCss + 70) * dpr) / sc) + 8; // commandes + bulle de message
+    HERO_Y = Math.max(Math.round(H * 0.45), Math.min(Math.round(H * 0.7), H - above));
+    this.canvas.width = W; this.canvas.height = H;
+    this.night.width = W; this.night.height = H;
+    this.backdrops = {};
+    return { scale: sc, cssW: (W * sc) / dpr, cssH: (H * sc) / dpr };
+  }
+
   load(state) {
     const s = Object.assign(newState(), state);
     s.camps = (s.camps || []).map(c => (typeof c === 'number' ? { a: c, x: 50 } : c));
@@ -300,6 +328,8 @@ export class Game {
     s.pitons = Array.isArray(s.pitons) ? s.pitons : [];
     if (s.ov && !OVERHANGS[s.ov.id]) s.ov = null;
     this.s = s;
+    this.rng = createRng(s.seed);
+    if (Number.isFinite(s.rngState)) this.rng.setState(s.rngState);
     this.walks = this.makeWalks(s.seed);
     this.puzzles = this.makePuzzles(s.seed);
     s.puzzleDone = Array.isArray(s.puzzleDone) ? s.puzzleDone : [];
@@ -322,8 +352,10 @@ export class Game {
   // ── Progression ────────────────────────────────────────────────────────
   skill(id) { return this.progress.has(id); }
   // Nouvelle ascension : état de départ, avec les bonus de talents.
-  freshState() {
-    const s = newState();
+  // Ce qu'on sauvegarde : l'état, avec l'avancée du hasard.
+  snapshot() { this.s.rngState = this.rng.state; return this.s; }
+  freshState(seed = 1) {
+    const s = newState(seed);
     if (this.skill('tec1')) s.pitonStock += 2;
     if (this.skill('tec2')) s.rope += 100;
     return s;
@@ -748,7 +780,7 @@ export class Game {
   }
   dropRock() {
     const r = this.rock;
-    r.x = this.clampX(this.s.x + (Math.random() - 0.5) * 24, this.s.alt);
+    r.x = this.clampX(this.s.x + (this.rng() - 0.5) * 24, this.s.alt);
     r.warn = this.skill('sur3') ? 2.1 : 1.5;
   }
 
@@ -854,8 +886,8 @@ export class Game {
     if (this.s.ov || this.s.walk || this.fall || this.sleep) return;
     e.next -= dt;
     if (e.next > 0) return;
-    e.next = 55 + Math.random() * 70;
-    const pick = pickEvent(this, e.last);
+    e.next = 55 + this.rng() * 70;
+    const pick = pickEvent(this, e.last, this.rng);
     if (!pick) return;
     e.last = pick.index;
     pick.event.run(this);
@@ -896,7 +928,7 @@ export class Game {
     if (gu.warn > 0) {
       gu.warn -= dt;
       if (gu.warn <= 0) {
-        gu.next = lerp(22, 9, wind) + Math.random() * 6;
+        gu.next = lerp(22, 9, wind) + this.rng() * 6;
         if (this.anchored) {
           s.energy = Math.max(0, s.energy - 2);
           this.say('Tu tiens bon, ancré au piton !', 'good');
@@ -923,7 +955,7 @@ export class Game {
     gu.next -= dt;
     if (gu.next <= 0) {
       gu.warn = this.skill('sur3') ? 2.4 : 1.8;
-      gu.dir = Math.random() < 0.5 ? -1 : 1;
+      gu.dir = this.rng() < 0.5 ? -1 : 1;
       this.say('Rafale ! Plante un piton', 'bad');
     }
   }
@@ -957,7 +989,7 @@ export class Game {
     r.next -= dt;
     if (r.next <= 0) {
       this.dropRock();
-      r.next = lerp(26, 12, s.alt / SUMMIT) + Math.random() * 8;
+      r.next = lerp(26, 12, s.alt / SUMMIT) + this.rng() * 8;
       this.say('Pierres ! Écarte-toi', 'bad');
     }
   }
@@ -1015,7 +1047,7 @@ export class Game {
     const g = this.g;
     const { wind, snow } = this.weather;
     g.save();
-    if (this.shake > 0) g.translate(Math.round((Math.random() - 0.5) * 3 * K), Math.round((Math.random() - 0.5) * 2 * K));
+    if (this.shake > 0) g.translate(Math.round((this.fx() - 0.5) * 3 * K), Math.round((this.fx() - 0.5) * 2 * K));
     if (this.drawnMode === 'profile' && this.s.ov) {
       this.drawProfile(g, wind);
       this.drawWeather(g, wind, snow);
@@ -1024,14 +1056,17 @@ export class Game {
       this.drawWeather(g, wind, snow);
     } else {
       this.drawSky(g);
+      g.save();
+      g.translate(OX, 0); // la face reste centrée, de 200 px de large
       this.drawFace(g, snow);
       this.drawClouds(g);
       this.drawObjects(g);
       this.drawRopes(g);
       this.drawHero(g, wind);
       this.drawRock(g);
-      this.drawWeather(g, wind, snow);
       this.drawFloats(g);
+      g.restore();
+      this.drawWeather(g, wind, snow);
     }
     g.restore();
     this.drawNight(g);
@@ -1048,7 +1083,7 @@ export class Game {
       const a = 700 * k + hash(k + 60) * 400;
       const y = Math.round(HERO_Y + (this.view - a) * 0.6 * K);
       if (y < -8 || y > H) continue;
-      const x = Math.round(((hash(k) * 140 + this.clock * (1.5 + (k % 3))) % 140) * K - 20 * K);
+      const x = Math.round(((hash(k) * 140 + this.clock * (1.5 + (k % 3))) % (W / K + 20)) * K - 20 * K);
       g.fillRect(x, y, 28, 4); g.fillRect(x + 6, y - 4, 16, 4); g.fillRect(x + 2, y + 4, 22, 2);
     }
   }
@@ -1056,27 +1091,28 @@ export class Game {
   drawFace(g, snow) {
     const cover = clamp(0.1 + (this.s.alt / SUMMIT) * 0.5 + snow * 0.4, 0, 1);
     const groundY = this.ys(0);
+    const tx = Math.floor((TW - W) / 2) + OX; // colonne de la texture qui tombe sous x = 0
     for (let y = 0; y < H; y++) {
       const a = this.view + (HERO_Y - y) / K;
       if (a < 0 || a > SUMMIT) continue;
-      const L = Math.max(0, this.edgeL(a) * K), R = Math.min(W - 1, this.edgeR(a) * K);
+      const L = Math.max(-OX, this.edgeL(a) * K), R = Math.min(WORLD_W + OX - 1, this.edgeR(a) * K);
       const am = Math.floor(a);
       let zone = a < 2400 ? 0 : a < 5800 ? 1 : 2;
       if (a > 2250 && a < 2550) zone = hash(am * 3) < (a - 2250) / 300 ? 1 : 0;
       if (a > 5650 && a < 5950) zone = hash(am * 5) < (a - 5650) / 300 ? 2 : 1;
       const row = ((Math.floor(a * K) % TILE_H) + TILE_H) % TILE_H;
-      g.drawImage(this.tiles[zone], L, row, R - L + 1, 1, L, y, R - L + 1, 1);
+      g.drawImage(this.tiles[zone], L + tx, row, R - L + 1, 1, L, y, R - L + 1, 1);
       g.fillStyle = P[0]; g.fillRect(L, y, 2, 1); g.fillRect(R - 1, y, 2, 1);
       g.fillStyle = P[3];
       g.fillRect(L + 2, y, Math.floor(cover * (2 + 6 * hash(Math.floor(a * 2) * 7 + 1))), 1);
       g.fillRect(R - 1 - Math.floor(cover * 3 * hash(Math.floor(a * 2) * 11 + 2)), y, 1, 1);
     }
     if (groundY < H) {
-      g.fillStyle = P[3]; g.fillRect(0, groundY, W, H - groundY);
-      g.fillStyle = P[0]; g.fillRect(0, groundY, W, 2);
-      g.fillStyle = bayerPattern(g, 2, 6); g.fillRect(0, groundY + 2, W, Math.min(24, H - groundY));
+      g.fillStyle = P[3]; g.fillRect(-OX, groundY, W, H - groundY);
+      g.fillStyle = P[0]; g.fillRect(-OX, groundY, W, 2);
+      g.fillStyle = bayerPattern(g, 2, 6); g.fillRect(-OX, groundY + 2, W, Math.min(24, H - groundY));
       g.fillStyle = P[2];
-      for (let x = 6; x < W; x += 18) g.fillRect(x, groundY + 8 + (x * 7) % 22, 6, 2);
+      for (let x = 6 - OX; x < W - OX; x += 18) g.fillRect(x, groundY + 8 + (x * 7) % 22, 6, 2);
     }
     // Repères d'altitude tous les 500 m
     for (let a = Math.max(500, Math.ceil((this.view - 60) / 500) * 500); a <= this.view + HERO_Y / K + 8; a += 500) {
@@ -1133,9 +1169,8 @@ export class Game {
     const top = Math.round(this.ys(3300));
     const h = 700 * K;
     if (top > H || top + h < 0) return;
-    const off = Math.floor(this.clock * 3 * K) % W;
-    g.drawImage(this.clouds, off, 0, W - off, h, 0, top, W - off, h);
-    if (off) g.drawImage(this.clouds, 0, 0, off, h, W - off, top, off, h);
+    const off = Math.floor(this.clock * 3 * K) % TW;
+    for (let x0 = -OX - off; x0 < W - OX; x0 += TW) g.drawImage(this.clouds, x0, top);
   }
 
   drawObjects(g) {
@@ -1195,7 +1230,7 @@ export class Game {
     const fy = this.ys(SUMMIT);
     if (fy > -20 && fy < H + 20) {
       const f = spriteCanvas('flag');
-      g.drawImage(f, W / 2 - (f.width >> 1), Math.round(fy) - f.height);
+      g.drawImage(f, WORLD_W / 2 - (f.width >> 1), Math.round(fy) - f.height);
     }
   }
 
@@ -1223,7 +1258,6 @@ export class Game {
       return;
     }
     const bob = this.clock - this.lastStep < 0.12 ? -K : 0;
-    g.fillStyle = P[0]; g.fillRect(x - (sp.width >> 1) - 2, top - 2 + bob, sp.width + 4, sp.height + 4); // fond sombre pour garder le héros lisible
     g.drawImage(sp, x - (sp.width >> 1), top + bob);
     if (this.gust.warn > 0 && Math.floor(this.clock * 8) % 2) {
       const dir = this.gust.dir;
@@ -1255,25 +1289,25 @@ export class Game {
   paintVista(g, id, altitude, lift = 0) {
     const alt = altitude / SUMMIT;
     // Ciel : trame de plus en plus sombre vers le haut, et d'autant plus que l'altitude est grande
-    g.fillStyle = P[3]; g.fillRect(0, 0, W, H);
-    for (let y = 0; y < H; y++) {
+    g.fillStyle = P[3]; g.fillRect(-OX, -OY, W, H);
+    for (let y = -OY; y < H - OY; y++) {
       const dens = clamp((1 - y / 220) * 12 * (0.4 + 0.6 * alt), 0, 12);
-      for (let x = 0; x < W; x++) if (BAYER[y % 4][x % 4] < dens) { g.fillStyle = P[2]; g.fillRect(x, y, 1, 1); }
+      for (let x = -OX; x < W - OX; x++) if (bay(x, y) < dens) { g.fillStyle = P[2]; g.fillRect(x, y, 1, 1); }
     }
     // Chaînes lointaines : deux plans de crêtes, calottes de neige
     for (const [seed, base, amp, col] of [[5, 238 - lift, 70, 2], [9, 268 - lift, 56, 1]]) {
-      for (let x = 0; x < W; x++) {
+      for (let x = -OX; x < W - OX; x++) {
         const top = Math.round(base - amp * Math.pow(vnoise(x / 24, seed), 1.4) - 8);
-        g.fillStyle = P[col]; g.fillRect(x, top, 1, H - top);
+        g.fillStyle = P[col]; g.fillRect(x, top, 1, H - OY - top);
         if (col === 2) {
           g.fillStyle = P[3]; g.fillRect(x, top, 1, 2 + (x % 3 === 0 ? 2 : 0));
-          g.fillStyle = P[1]; if (BAYER[top % 4][x % 4] < 5) g.fillRect(x, top + 4, 1, 3);
+          g.fillStyle = P[1]; if (bay(x, top) < 5) g.fillRect(x, top + 4, 1, 3);
         }
       }
     }
     // Mer de nuages au fond
-    for (let y = 270 - lift; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    for (let y = 270 - lift; y < H - OY; y++) {
+      for (let x = -OX; x < W - OX; x++) {
         const v = hash(Math.floor(x / 5) * 211 + Math.floor(y / 3) * 17 + id);
         g.fillStyle = v < 0.5 ? P[3] : P[2];
         if (y > 282 - lift || v < 0.7) g.fillRect(x, y, 1, 1);
@@ -1286,25 +1320,26 @@ export class Game {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
+    g.translate(OX, OY); // la scène fait 200 × 320 ; le reste de l'écran prolonge le ciel et la roche
     const LIP = 164, WALL = 30;
     this.paintVista(g, roof.id, roof.a);
     // Masse rocheuse au-dessus : on la voit en coupe, jusqu'à la lèvre du toit
     const zone = roof.a < 2400 ? 0 : roof.a < 5800 ? 1 : 2;
-    for (let x = 0; x < LIP; x++) {
+    for (let x = -OX; x < LIP; x++) {
       const under = this.roofUnder(x) + (x > LIP - 14 ? Math.round((x - (LIP - 14)) * 0.7) : 0);
-      g.drawImage(this.tiles[zone], x, (x * 3) % 200, 1, under, x, 0, 1, under);
+      g.drawImage(this.tiles[zone], x + OX, mod(x * 3, 200), 1, under + OY, x, -OY, 1, under + OY);
     }
     // Ombre tramée sous le toit
-    for (let x = 0; x < LIP; x++) {
+    for (let x = -OX; x < LIP; x++) {
       const under = this.roofUnder(x) + (x > LIP - 14 ? Math.round((x - (LIP - 14)) * 0.7) : 0);
       for (let y = under - 26; y < under; y++) {
         const d = (y - (under - 26)) / 26;
-        if (BAYER[y % 4][x % 4] / 16 < d * 0.85) { g.fillStyle = P[0]; g.fillRect(x, y, 1, 1); }
+        if (bay(x, y) / 16 < d * 0.85) { g.fillStyle = P[0]; g.fillRect(x, y, 1, 1); }
       }
       g.fillStyle = P[0]; g.fillRect(x, under, 1, 2);
     }
     // Lèvre du toit enneigée
-    g.fillStyle = P[0]; g.fillRect(LIP - 2, 0, 3, this.roofUnder(LIP) + 8);
+    g.fillStyle = P[0]; g.fillRect(LIP - 2, -OY, 3, this.roofUnder(LIP) + 8 + OY);
     for (let y = 0; y < 8; y++) { g.fillStyle = P[3]; g.fillRect(LIP - 10 - y, 8 + y * 4, 8 + y, 3); }
     // Stalactites de glace sous le toit
     for (let x = 6; x < LIP - 4; x += 5 + Math.floor(hash(x + roof.id * 13) * 7)) {
@@ -1315,9 +1350,9 @@ export class Game {
       }
     }
     // Paroi sous le toit, à gauche : le mur qu'on vient de gravir
-    for (let y = this.roofUnder(0); y < H; y++) {
+    for (let y = this.roofUnder(0); y < H - OY; y++) {
       const w = WALL + Math.round(8 * vnoise(y / 17, 31)) - Math.min(14, Math.floor((y - 110) / 14));
-      g.drawImage(this.tiles[zone], 0, (y * 2) % 400, Math.max(4, w), 1, 0, y, Math.max(4, w), 1);
+      g.drawImage(this.tiles[zone], 0, (y * 2) % 400, Math.max(4, w) + OX, 1, -OX, y, Math.max(4, w) + OX, 1);
       g.fillStyle = P[0]; g.fillRect(Math.max(4, w), y, 2, 1);
     }
     // Pitons le long du toit : le cheminement
@@ -1336,6 +1371,8 @@ export class Game {
     const roof = OVERHANGS[ov.id];
     const LIP = 164;
     g.drawImage(this.profileBackdrop(roof), 0, 0);
+    g.save();
+    g.translate(OX, OY);
     const frac = ov.p / roof.len;
     const hx = Math.round(46 + (LIP - 46 - 26) * frac - wind * K * Math.sin(this.clock * 6));
     this.profileHeroX = hx;
@@ -1360,13 +1397,14 @@ export class Game {
       g.fillStyle = P[4];
       for (let k = 0; k < 6; k++) g.fillRect(hx + this.gust.dir * (14 + k * 2), hy + 12 + (k % 2) * 2, 2, 2);
     }
+    g.restore();
     this.drawFloats(g);
   }
 
   // ── Vue de profil : pente douce à marcher ──────────────────────────────
   // Sol de la pente : plateau, rampe lissée, plateau. La rampe monte du côté de la direction à suivre.
   walkGround(sec, x) {
-    const x0 = 24, x1 = W - 24;
+    const x0 = 24, x1 = WORLD_W - 24;
     const t = smooth(clamp((x - x0) / (x1 - x0), 0, 1));
     const rise = clamp(sec.slope * 190, 20, 92);
     const up = sec.dir > 0 ? t : 1 - t;
@@ -1379,21 +1417,24 @@ export class Game {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
+    g.translate(OX, OY);
     this.paintVista(g, 100 + sec.id, sec.a, 110);
     const zone = sec.a < 2400 ? 0 : sec.a < 5800 ? 1 : 2;
-    for (let x = 0; x < W; x++) {
+    for (let x = -OX; x < W - OX; x++) {
       const y = this.walkGround(sec, x);
-      g.drawImage(this.tiles[zone], x, (x * 5 + sec.id * 40) % 250, 1, H - y, x, y, 1, H - y);
+      const srcY = mod(x * 5 + sec.id * 40, 250), rows = Math.min(H - OY - y, TILE_H - srcY);
+      g.fillStyle = P[1]; g.fillRect(x, y, 1, H - OY - y);
+      g.drawImage(this.tiles[zone], x + OX, srcY, 1, rows, x, y, 1, rows);
       for (let k = 0; k < 40; k++) { // ombre tramée sous la surface
         const d = k / 40;
-        if (BAYER[(y + k) % 4][x % 4] / 16 < d * 0.9) { g.fillStyle = P[0]; g.fillRect(x, y + k, 1, 1); }
+        if (bay(x, y + k) / 16 < d * 0.9) { g.fillStyle = P[0]; g.fillRect(x, y + k, 1, 1); }
       }
       g.fillStyle = P[0]; g.fillRect(x, y, 1, 2);
       g.fillStyle = P[3]; g.fillRect(x, y + 2, 1, 3 + Math.floor(hash(x * 3 + sec.id) * 3));
       g.fillStyle = P[2]; if (x % 2) g.fillRect(x, y + 6, 1, 1);
     }
     for (let i = 0; i < 9; i++) { // petits blocs posés sur la pente
-      const x = 14 + Math.floor(hash(sec.id * 61 + i) * (W - 28)), y = this.walkGround(sec, x);
+      const x = 14 + Math.floor(hash(sec.id * 61 + i) * (WORLD_W - 28)), y = this.walkGround(sec, x);
       g.fillStyle = P[0]; g.fillRect(x - 4, y - 5, 9, 6);
       g.fillStyle = P[1]; g.fillRect(x - 3, y - 4, 7, 4);
       g.fillStyle = P[3]; g.fillRect(x - 3, y - 4, 3, 1);
@@ -1405,7 +1446,9 @@ export class Game {
   drawWalk(g, wind) {
     const s = this.s, wk = s.walk, sec = this.walks[wk.id];
     g.drawImage(this.walkBackdrop(sec), 0, 0);
-    const x0 = 24, x1 = W - 24;
+    g.save();
+    g.translate(OX, OY);
+    const x0 = 24, x1 = WORLD_W - 24;
     const hx = Math.round(sec.dir > 0 ? x0 + wk.p * (x1 - x0) : x1 - wk.p * (x1 - x0));
     const hy = this.walkGround(sec, hx) + 2;
     this.profileHeroX = hx;
@@ -1435,6 +1478,7 @@ export class Game {
     g.fillStyle = P[0]; g.fillRect(66, 192, 68, 12);
     g.fillStyle = P[3]; g.fillRect(68, 194, 64, 8);
     g.fillStyle = P[4]; g.fillRect(68, 194, Math.round(64 * wk.p), 8);
+    g.restore();
     this.drawFloats(g);
   }
 
@@ -1448,14 +1492,14 @@ export class Game {
   }
 
   drawWeather(g, wind, snow) {
-    const dt = this.dt;
+    const dt = this.frameDt;
     const n = snow > 0.02 ? Math.floor(10 + 160 * snow) : 0;
     for (let i = 0; i < n; i++) {
       const f = this.flakes[i];
       f.y += (20 + 45 * snow) * K * f.v * dt;
       f.x -= (5 + 90 * wind) * K * f.v * dt;
-      if (f.y > H) { f.y = -2; f.x = Math.random() * (W + 80); }
-      if (f.x < -2) { f.x = W + 2; f.y = Math.random() * H; }
+      if (f.y > H) { f.y = -2; f.x = this.fx() * (W + 80); }
+      if (f.x < -2) { f.x = W + 2; f.y = this.fx() * H; }
       const x = Math.round(f.x), y = Math.round(f.y);
       g.fillStyle = P[0]; g.fillRect(x + 1, y + 1, f.v > 1.1 ? 2 : 1, f.v > 1.1 ? 2 : 1);
       g.fillStyle = P[3]; g.fillRect(x, y, f.v > 1.1 ? 2 : 1, f.v > 1.1 ? 2 : 1);
@@ -1464,7 +1508,7 @@ export class Game {
       g.fillStyle = P[3];
       for (const st of this.streaks) {
         st.x -= (90 + 160 * wind) * K * dt;
-        if (st.x < -st.l) { st.x = W + 6; st.y = Math.random() * H; }
+        if (st.x < -st.l) { st.x = W + 6; st.y = this.fx() * H; }
         g.fillRect(Math.round(st.x), Math.round(st.y), Math.round(st.l * (0.5 + wind)), 1);
       }
     }
@@ -1494,9 +1538,9 @@ export class Game {
       n.globalCompositeOperation = 'destination-out';
       n.fillStyle = 'rgba(0,0,0,0.4)';
       const r0 = (this.sleep ? 40 : 30) * K;
-      const cx = this.drawnMode !== 'face' && (this.s.ov || this.s.walk) ? (this.profileHeroX ?? W / 2) : this.hx * K;
-      const inProfile = this.drawnMode !== 'face' && (this.s.ov || this.s.walk);
-      const cy = inProfile ? (this.profileHeroY ?? 140) : HERO_Y - 8;
+      const side = this.drawnMode !== 'face' && (this.s.ov || this.s.walk);
+      const cx = side ? (this.profileHeroX ?? 100) + OX : this.hx * K + OX;
+      const cy = side ? (this.profileHeroY ?? 140) + OY : HERO_Y - 8;
       for (const r of [r0, r0 * 0.7, r0 * 0.4]) {
         n.beginPath(); n.arc(cx, cy, r, 0, Math.PI * 2); n.fill();
       }

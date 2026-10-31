@@ -1,7 +1,7 @@
 // 30 événements aléatoires qui ponctuent l'ascension. Chacun a une condition d'apparition (`when`),
 // un effet (`run`) et le résumé de cet effet (`fx`) affiché dans le bandeau.
 // g = le jeu : g.s (état), g.weather, g.daylight, g.temperature, g.gain(), g.shake…
-import { SUMMIT } from './game.js';
+import { SUMMIT } from './game.js?v=1.5.0';
 
 const hourOf = g => (g.s.min % 1440) / 60;
 
@@ -66,15 +66,15 @@ export const EVENTS = [
   { icon: 'ti-battery-1', title: 'Le mur', text: 'Plus rien ne vient. Les jambes sont en plomb.', fx: '−15 énergie',
     when: g => g.s.alt > 2000, run: g => g.gain('energy', -15), bad: true },
   { icon: 'ti-ghost', title: 'Hallucination', text: 'Une silhouette grimpe à côté de toi. Il n’y a personne.', fx: '−6 énergie, tu dévies',
-    when: g => g.s.alt > 7000, run: g => { g.gain('energy', -6); g.s.x = g.clampX(g.s.x + (Math.random() < 0.5 ? -14 : 14), g.s.alt); }, bad: true },
+    when: g => g.s.alt > 7000, run: g => { g.gain('energy', -6); g.s.x = g.clampX(g.s.x + (g.rng() < 0.5 ? -14 : 14), g.s.alt); }, bad: true },
   { icon: 'ti-alert-circle', title: 'Fuite d’oxygène', text: 'Un joint siffle : la bouteille se vide plus vite.', fx: '−35 s d’oxygène',
     when: g => g.s.o2On && g.s.o2Sec > 40, run: g => { g.s.o2Sec -= 35; }, bad: true },
 ];
 
 // Tire un événement parmi ceux dont la condition est remplie (jamais deux fois de suite le même).
-export function pickEvent(g, lastIndex = -1) {
+export function pickEvent(g, lastIndex = -1, rng = g.rng) {
   const ok = EVENTS.map((e, i) => (i !== lastIndex && e.when(g) ? i : -1)).filter(i => i >= 0);
   if (!ok.length) return null;
-  const index = ok[Math.floor(Math.random() * ok.length)];
+  const index = ok[Math.floor(rng() * ok.length)];
   return { index, event: EVENTS[index] };
 }

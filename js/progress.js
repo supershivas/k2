@@ -1,7 +1,8 @@
 // Progression permanente : XP, niveaux, arbre de talents et reliques. Conservée entre les ascensions
-// (localStorage `k2:progress`, exportée avec les autres données).
+// (entrée `progress` du stockage, exportée avec les autres données).
 
-const KEY = 'k2:progress';
+import { store } from './store.js?v=1.5.0';
+
 export const MAX_LEVEL = 10;
 
 export const BRANCHES = [
@@ -34,10 +35,8 @@ export class Progress {
     this.xp = 0;
     this.skills = [];
     this.relics = [];
-    try {
-      const d = JSON.parse(localStorage.getItem(KEY));
-      if (d) this.replace(d, false);
-    } catch { /* progression illisible : on repart de zéro */ }
+    const d = store.load('progress');
+    if (d) this.replace(d, false);
   }
 
   replace(d, save = true) {
@@ -48,7 +47,7 @@ export class Progress {
   }
 
   toJSON() { return { xp: this.xp, skills: this.skills, relics: this.relics }; }
-  save() { try { localStorage.setItem(KEY, JSON.stringify(this)); } catch { /* stockage indisponible */ } }
+  save() { store.save('progress', this.toJSON()); }
 
   get level() {
     let l = 1;

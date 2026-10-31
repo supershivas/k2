@@ -1,0 +1,105 @@
+/* ─── Base CSS d'un jeu — partagé entre les jeux ───────────────────────────
+   Source de vérité : supershivas/game-system/modules/game.css
+   Applique la section 7 de CONVENTIONS.md : écran à hauteur fixe (100dvh),
+   aucun geste laissé au navigateur, pixels nets, survol réservé aux souris,
+   zones sûres des téléphones, saisie à 16 px (pas de zoom iOS), mouvement
+   réduit respecté.
+
+   Ce fichier ne porte AUCUNE couleur ni police : l'identité est au jeu
+   (design system des jeux, à définir). Il lit des variables, avec des
+   valeurs de repli :
+     --jeu-fond  --jeu-encre  --jeu-accent  --jeu-police  --jeu-cible (44px)
+   Classes : .jeu-ecran (conteneur plein écran), .jeu-canvas, .jeu-toast,
+   .jeu-cache, .safe-top, .safe-bottom.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--jeu-fond, #000);
+  color: var(--jeu-encre, #fff);
+  font-family: var(--jeu-police, system-ui, sans-serif);
+  overscroll-behavior: none;          /* pas de rechargement en tirant vers le bas */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;                  /* pas de sélection de texte en jouant */
+  -webkit-touch-callout: none;        /* pas de loupe ni de menu sur appui long (iOS) */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Le conteneur du jeu : toute la hauteur visible, barres mobiles comprises */
+.jeu-ecran {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;                 /* ni pince, ni défilement, ni double toucher */
+}
+
+.jeu-canvas,
+canvas.pixel {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+/* Les champs de saisie gardent la sélection, et 16 px pour éviter le zoom iOS */
+input, textarea, select, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+@media (max-width: 768px) {
+  input:not([type]), input[type="text"], input[type="number"], input[type="search"],
+  input[type="password"], input[type="url"], textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Cibles tactiles */
+button, [role="button"], .cible {
+  min-width: var(--jeu-cible, 44px);
+  min-height: var(--jeu-cible, 44px);
+  touch-action: manipulation;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* Le survol ne porte aucune information : seulement pour les vraies souris */
+@media (hover: none) {
+  button:active { opacity: .7; }
+}
+
+/* Zones sûres (encoche, barre d'accueil) */
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Boîtes de dialogue natives : toujours rattachées au body */
+dialog { max-width: min(92vw, 520px); max-height: 90dvh; overflow: auto; }
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+
+/* Toast (mise à jour, sauvegarde importée…) */
+.jeu-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  background: var(--jeu-encre, #fff);
+  color: var(--jeu-fond, #000);
+  font-size: 14px;
+  z-index: 1000;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+.jeu-toast[hidden] { display: block; opacity: 0; }
+
+.jeu-cache { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

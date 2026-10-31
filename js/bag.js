@@ -1,10 +1,10 @@
 // Le sac : inventaire, météo (heure exacte matérialisée par une ligne) et carte de la montagne.
 // Les écrans sont des canvas Game Boy dans la palette du jeu.
-import { PALETTE as P } from './sprites.js';
-import { drawText } from './pixfont.js';
-import { OVERHANGS, SUMMIT } from './game.js';
-import { BRANCHES, SKILLS, MAX_LEVEL, xpForLevel } from './progress.js';
-import { RELICS } from './relics.js';
+import { PALETTE as P } from './sprites.js?v=1.5.0';
+import { drawText } from './pixfont.js?v=1.5.0';
+import { OVERHANGS, SUMMIT } from './game.js?v=1.5.0';
+import { BRANCHES, SKILLS, MAX_LEVEL, xpForLevel } from './progress.js?v=1.5.0';
+import { RELICS } from './relics.js?v=1.5.0';
 
 const $ = id => document.getElementById(id);
 let game;

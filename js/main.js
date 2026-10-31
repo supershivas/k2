@@ -1,39 +1,19 @@
-import { Game, SUMMIT } from './game.js';
-import { loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
-import { initBag, openBag } from './bag.js';
-import { runPuzzle } from './puzzles.js';
-import { paintSprite, getSprite } from './sprites.js';
-import { initEditor, openEditor } from './editor.js';
-import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from '../app-update.js';
+// Cycle de vie du jeu : écran titre → partie → réglages ; plein écran, boucle à pas fixe, sauvegarde, debug.
+import { Game, SUMMIT } from './game.js?v=1.5.0';
+import { store, DEBUG } from './store.js?v=1.5.0';
+import { createLoop } from './lib/loop.js?v=1.5.0';
+import { createKeys, stopTypeahead, DIRECTIONS } from './lib/keys.js?v=1.5.0';
+import { lockBrowserGestures } from './lib/pointer.js?v=1.5.0';
+import { autosave } from './lib/save.js?v=1.5.0';
+import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from './lib/app-update.js?v=1.5.0';
+import { loadSprites, getToken, setToken, publishSprites, paintSprite, getSprite } from './sprites.js?v=1.5.0';
+import { initBag, openBag } from './bag.js?v=1.5.0';
+import { runPuzzle } from './puzzles.js?v=1.5.0';
+import { initEditor, openEditor } from './editor.js?v=1.5.0';
 
 const $ = id => document.getElementById(id);
-const KEYS = { save: 'k2:save', records: 'k2:records' };
 
-// ── Stockage local (préférences et progression, exportables en JSON) ──────
-function read(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
-}
-function write(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* stockage indisponible */ }
-}
-
-let records = Object.assign({ maxAlt: 0, summits: 0, bestDays: 0 }, read(KEYS.records, {}));
-
-// ── Tokens du design system ──────────────────────────────────────────────
-async function applyTokens() {
-  try {
-    const t = await (await fetch('design-tokens.json')).json();
-    const r = document.documentElement.style;
-    const c = t.colors;
-    r.setProperty('--accent', c.accentFixed); r.setProperty('--accent-hover', c.accentFixedHover); r.setProperty('--accent-fg', c.accentFixedFg);
-    r.setProperty('--bg', c.sidebarBg); r.setProperty('--fg', c.sidebarFg); r.setProperty('--muted', c.sidebarMuted);
-    r.setProperty('--icon', c.sidebarIcon); r.setProperty('--hover', c.sidebarHover); r.setProperty('--selected', c.sidebarSelected);
-    r.setProperty('--selected-fg', c.sidebarSelectedFg); r.setProperty('--border', c.sidebarBorder);
-    r.setProperty('--radius-sm', t.radii.sm); r.setProperty('--radius-md', t.radii.md); r.setProperty('--radius-lg', t.radii.lg);
-    r.setProperty('--font-sans', t.fonts.sans); r.setProperty('--font-title', t.fonts.title); r.setProperty('--font-mono', t.fonts.mono);
-    r.setProperty('--overlay', t.modal.overlayBackground);
-  } catch { /* les valeurs par défaut du CSS suffisent */ }
-}
+let records = store.load('records');
 
 // ── Toast et messages ────────────────────────────────────────────────────
 let toastTimer;
@@ -113,6 +93,15 @@ function showEvent(ev) {
   eventTimer = setTimeout(() => el.classList.remove('show'), 5200);
 }
 
+// Graine d'une nouvelle ascension : hors de la logique du jeu (la logique n'utilise que le hasard à graine).
+function newSeed() {
+  if (DEBUG) {
+    const v = new URLSearchParams(location.search).get('seed');
+    if (v !== null && Number.isFinite(+v)) return +v;
+  }
+  return crypto.getRandomValues(new Uint32Array(1))[0] % 1e9;
+}
+
 const game = new Game($('game'), {
   say,
   event: showEvent,
@@ -120,8 +109,9 @@ const game = new Game($('game'), {
   summit: onSummit,
 });
 
-function save() { write(KEYS.save, game.s); }
-function saveRecords() { write(KEYS.records, records); }
+function save() { store.save('save', game.snapshot()); }
+function saveRecords() { store.save('records', records); }
+function saveAll() { updateRecords(); save(); saveRecords(); }
 
 function fmt(n) { return Math.round(n).toLocaleString('fr-FR'); }
 
@@ -133,22 +123,22 @@ function onSummit() {
   records.summits++;
   const days = Math.floor(game.s.min / 1440) + 1;
   records.bestDays = records.bestDays ? Math.min(records.bestDays, days) : days;
-  updateRecords();
-  saveRecords();
-  save();
+  saveAll();
   confirmDialog(`Sommet du K2 : ${fmt(SUMMIT)} m`, `Tu y es arrivé en ${days} jour${days > 1 ? 's' : ''}, avec ${game.s.falls} chute${game.s.falls > 1 ? 's' : ''}. Seul face aux éléments, tu as gagné.`, 'Nouvelle ascension', 'Rester au sommet')
     .then(again => { if (again) newClimb(); else showHome(); });
 }
 
-function newClimb() {
-  game.load(game.freshState());
+function newClimb(seed = newSeed()) {
+  game.load(game.freshState(seed));
   save();
   showHome();
 }
 
 function renderHome() {
   const s = game.s;
-  $('btn-play-label').textContent = s.steps > 0 && !s.summit ? `Continuer · ${fmt(s.alt)} m` : 'Grimper';
+  const going = s.steps > 0 && !s.summit;
+  $('btn-play-label').textContent = going ? `Continuer · ${fmt(s.alt)} m` : 'Grimper';
+  $('btn-new').hidden = !going;
   const bits = [];
   if (records.maxAlt) bits.push(`Record ${fmt(records.maxAlt)} m`);
   bits.push(`Niveau ${game.progress.level}`);
@@ -158,18 +148,28 @@ function renderHome() {
 
 function showHome() {
   closeAllDialogs();
+  saveAll();
   game.playing = false;
-  game.hold.L = game.hold.R = false;
+  releaseHolds();
   $('event').classList.remove('show');
   $('home').hidden = false;
   document.body.classList.add('paused');
   renderHome();
 }
 
+// Plein écran sur navigateur mobile (là où l'API existe) ; une application installée l'est déjà.
+function goFullscreen() {
+  const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+  if (standalone || !matchMedia('(pointer: coarse)').matches || document.fullscreenElement) return;
+  document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => { /* refusé : le navigateur reste en l'état */ });
+}
+
 function play() {
   $('home').hidden = true;
   document.body.classList.remove('paused');
+  fit();
   game.playing = true;
+  goFullscreen();
   if (game.s.steps === 0) say('Alterne Gauche / Droite. Deux fois pareil : traverser', 'info');
 }
 
@@ -206,70 +206,114 @@ function updateHud() {
   $('b-piton-label').textContent = `Piton ${s.pitonStock}`;
 }
 
-// ── Boucle ───────────────────────────────────────────────────────────────
-let prev = performance.now(), hudAt = 0, saveAt = 0;
-function loop(now) {
-  const dt = (now - prev) / 1000;
-  prev = now;
-  const modal = document.querySelector('dialog[open]');
-  if (!modal) game.update(dt);
-  if (!modal && game.playing && game.s.puzzle && !puzzleOpen) openPuzzle();
-  game.render();
-  if (now - hudAt > 100) { hudAt = now; updateHud(); }
-  if (game.playing && now - saveAt > 2000) { saveAt = now; updateRecords(); save(); saveRecords(); }
-  requestAnimationFrame(loop);
+// ── Plein écran : le canvas couvre tout l'écran, à l'échelle entière ─────
+function fit() {
+  const scr = $('screen');
+  const dpr = window.devicePixelRatio || 1;
+  const ctrl = $('controls').offsetHeight || 150;
+  document.documentElement.style.setProperty('--ctrl-h', `${ctrl}px`);
+  const r = game.resize(Math.round(scr.clientWidth * dpr), Math.round(scr.clientHeight * dpr), dpr, ctrl);
+  const cv = $('game');
+  cv.style.width = `${r.cssW}px`;
+  cv.style.height = `${r.cssH}px`;
+}
+window.addEventListener('resize', fit);
+window.visualViewport?.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+
+// ── Boucle à pas fixe (section 9) : pause sur modale ou perte de focus ────
+const modalOpen = () => !!document.querySelector('dialog[open]');
+let blurred = false, hudAt = 0, lastFrame = performance.now();
+const ptrHold = { L: false, R: false }; // boutons à l'écran
+const keys = createKeys({
+  actions: { piton: ['p', ' ', 'ArrowDown'], eat: 'e', o2: 'o', camp: 'c', bag: 'i', meteo: 'm', map: 'k' },
+  onAction: name => {
+    if (modalOpen()) return;
+    if (name === 'piton') game.plantPiton();
+    else if (name === 'eat') game.eat();
+    else if (name === 'o2') game.toggleOxygen();
+    else if (name === 'camp') game.camp();
+    else if (name === 'bag') openBag('inv');
+    else if (name === 'meteo') openBag('meteo');
+    else if (name === 'map') openBag('map');
+  },
+});
+stopTypeahead();
+
+// Un pas à chaque appui d'une flèche (touche physique : ZQSD en AZERTY, WASD en QWERTY).
+window.addEventListener('keydown', e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || modalOpen()) return;
+  if (DIRECTIONS.left.includes(e.code)) game.step('L');
+  else if (DIRECTIONS.right.includes(e.code)) game.step('R');
+});
+
+function releaseHolds() {
+  ptrHold.L = ptrHold.R = false;
+  game.hold.L = game.hold.R = false;
+  keys.clear();
 }
 
-// ── Commandes ────────────────────────────────────────────────────────────
+const loop = createLoop({
+  step: 1 / 60,
+  update: dt => {
+    if (modalOpen() || blurred) return;
+    const ax = keys.axis().x;
+    game.hold.L = ptrHold.L || ax < 0;
+    game.hold.R = ptrHold.R || ax > 0;
+    game.update(dt);
+    if (game.playing && game.s.puzzle && !puzzleOpen) openPuzzle();
+  },
+  render: () => {
+    const now = performance.now();
+    game.frameDt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    game.render();
+    if (now - hudAt > 100) { hudAt = now; updateHud(); }
+  },
+});
+
+window.addEventListener('blur', () => { blurred = true; releaseHolds(); });
+window.addEventListener('focus', () => { blurred = false; });
+autosave(() => { if (game.playing) saveAll(); }, { everyMs: 2000 });
+
+// ── Commandes à l'écran ──────────────────────────────────────────────────
 function press(el, fn) {
   el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 // Gauche / Droite : un pas à chaque appui ; maintenus, ils font marcher sur les pentes douces.
 function holdButton(el, side) {
-  el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); game.hold[side] = true; game.step(side); });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => el.addEventListener(t, () => { game.hold[side] = false; }));
+  el.addEventListener('pointerdown', e => { e.preventDefault(); ptrHold[side] = true; game.step(side); });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
+['pointerup', 'pointercancel'].forEach(t => window.addEventListener(t, () => { ptrHold.L = ptrHold.R = false; }));
 holdButton($('b-left'), 'L');
 holdButton($('b-right'), 'R');
 press($('b-piton'), () => game.plantPiton());
 press($('b-eat'), () => game.eat());
 press($('b-o2'), () => game.toggleOxygen());
 press($('b-camp'), () => game.camp());
-$('b-bag').addEventListener('click', () => openBag());
-
-const keys = { ArrowLeft: 'L', q: 'L', a: 'L', ArrowRight: 'R', d: 'R' };
-window.addEventListener('keydown', e => {
-  if (e.target.closest?.('input, textarea') || document.querySelector('dialog[open]')) return;
-  if (e.repeat && keys[e.key]) return;
-  if (keys[e.key]) { game.hold[keys[e.key]] = true; game.step(keys[e.key]); e.preventDefault(); }
-  else if (e.key === ' ' || e.key === 'ArrowDown' || e.key === 'p') { game.plantPiton(); e.preventDefault(); }
-  else if (e.key === 'e') game.eat();
-  else if (e.key === 'o') game.toggleOxygen();
-  else if (e.key === 'c') game.camp();
-  else if (e.key === 'i') openBag('inv');
-  else if (e.key === 'm') openBag('meteo');
-  else if (e.key === 'k') openBag('map');
-});
-window.addEventListener('keyup', e => { if (keys[e.key]) game.hold[keys[e.key]] = false; });
-window.addEventListener('blur', () => { game.hold.L = game.hold.R = false; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { updateRecords(); save(); saveRecords(); game.hold.L = game.hold.R = false; } });
-window.addEventListener('pagehide', () => { updateRecords(); save(); saveRecords(); });
+$('b-bag').addEventListener('click', () => { if (game.playing) openBag(); });
+lockBrowserGestures($('screen'));
 
 // ── Navigation et écrans ─────────────────────────────────────────────────
-$('brand').addEventListener('click', e => { e.preventDefault(); showHome(); });
 $('btn-play').addEventListener('click', play);
+$('btn-new').addEventListener('click', async () => {
+  if (!await confirmDialog('Nouvelle ascension ?', 'Ta progression actuelle sera perdue. Tes records, talents, reliques et sprites sont conservés.', 'Recommencer')) return;
+  newClimb();
+  toast('Nouvelle ascension');
+});
 $('btn-editor').addEventListener('click', () => openEditor());
 $('open-settings').addEventListener('click', openSettings);
 document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 document.querySelectorAll('dialog.modal:not([data-sticky])').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 $('s-editor').addEventListener('click', () => { $('settings').close(); openEditor(); });
-$('s-new').addEventListener('click', async () => {
-  if (!await confirmDialog('Nouvelle ascension ?', 'Ta progression actuelle sera perdue. Tes records et tes sprites sont conservés.', 'Recommencer')) return;
+$('s-title').addEventListener('click', () => { $('settings').close(); showHome(); });
+if (document.fullscreenEnabled) $('s-fullscreen').hidden = false;
+$('s-fullscreen').addEventListener('click', () => {
   $('settings').close();
-  newClimb();
-  toast('Nouvelle ascension');
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => toast('Plein écran refusé par le navigateur'));
 });
 
 async function openSettings() {
@@ -307,10 +351,9 @@ $('s-publish').addEventListener('click', async () => {
   }
 });
 
-$('s-export').addEventListener('click', async () => {
-  updateRecords();
-  const version = await loadVersion();
-  downloadJSON({ app: 'k2', version, exportedAt: new Date().toISOString(), save: game.s, records, sprites: getUserEdits(), progress: game.progress.toJSON() }, 'k2-export.json');
+$('s-export').addEventListener('click', () => {
+  saveAll();
+  downloadJSON(store.exportAll(), 'k2-sauvegarde.json');
 });
 $('s-import').addEventListener('click', () => $('s-file').click());
 $('s-file').addEventListener('change', async e => {
@@ -318,25 +361,60 @@ $('s-file').addEventListener('change', async e => {
   e.target.value = '';
   if (!file) return;
   try {
-    const data = JSON.parse(await file.text());
-    if (data.app !== 'k2') throw new Error('Ce fichier n’est pas un export K2');
-    if (data.save) { game.load(data.save); save(); }
-    if (data.records) { records = Object.assign(records, data.records); saveRecords(); }
-    if (data.sprites) importSprites(data.sprites);
-    if (data.progress) game.progress.replace(data.progress);
-    renderHome();
-    toast('Export importé');
+    let dump = JSON.parse(await file.text());
+    if (dump.app === 'k2') { // export d'avant la v1.5 : converti en entrées du stockage
+      const wrap = data => ({ v: 1, data });
+      dump = { game: 'k2', entries: {
+        ...(dump.save && { save: wrap(dump.save) }), ...(dump.records && { records: wrap(dump.records) }),
+        ...(dump.progress && { progress: wrap(dump.progress) }), ...(dump.sprites && { sprites: wrap(dump.sprites) }),
+      } };
+    }
+    store.importAll(dump);
+    await reloadFromStore();
+    toast('Sauvegarde importée');
   } catch (err) {
     toast(`Import impossible : ${err.message}`);
   }
 });
 
+// Relit tout depuis le stockage (démarrage, import)
+async function reloadFromStore() {
+  records = store.load('records');
+  game.progress.replace(store.load('progress') || {}, false);
+  game.load(store.load('save') || game.freshState(newSeed()));
+  await loadSprites();
+  showHome();
+}
+
+// ── Mode debug : ?debug=1 (section 18) ───────────────────────────────────
+async function installDebugMode() {
+  const { installDebug } = await import('./lib/debug.js?v=1.5.0');
+  const places = { base: { a: 0 } };
+  game.walks.forEach(w => { places[`pente${w.id + 1}`] = { a: w.a - 3 }; });
+  game.puzzles.forEach(p => { places[`puzzle${p.id + 1}`] = { a: p.a - 3 }; });
+  [1200, 2300, 3400, 4500, 5600, 6700, 7700].forEach((a, i) => { places[`dever${i + 1}`] = { a: a - 3 }; });
+  installDebug({
+    state: () => ({ alt: game.s.alt, x: game.s.x, energy: game.s.energy, warmth: game.s.warmth, mode: game.mode, seed: game.s.seed, niveau: game.progress.level, pitons: game.s.pitonStock }),
+    places,
+    teleport: p => { game.s.alt = p.a; game.s.x = 50; game.view = p.a; game.hx = 50; game.s.ov = game.s.walk = null; },
+    setTimeScale: s => loop.setTimeScale(s),
+    setSeed: n => newClimb(n),
+    reset: () => newClimb(),
+    extra: { game },
+  });
+}
+
 // ── Démarrage ────────────────────────────────────────────────────────────
 initEditor({ confirm: confirmDialog });
 initBag(game, updateHud);
-applyTokens();
-game.load(read(KEYS.save, null) || game.freshState());
+game.load(store.load('save') || game.freshState(newSeed()));
+fit();
 loadSprites();
 showHome();
-requestAnimationFrame(loop);
-startUpdateCheck({ onUpdated: v => toast(`Mis à jour en v${v}`) });
+loop.start();
+if (DEBUG) installDebugMode();
+startUpdateCheck({
+  isBusy: () => game.playing && !modalOpen(),
+  beforeReload: saveAll,
+  onUpdated: v => toast(`Mis à jour en v${v}`),
+});

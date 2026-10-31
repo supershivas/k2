@@ -1,68 +1,60 @@
-/* Valeurs issues de design-tokens.json ; main.js les réapplique au chargement. */
+/* Polices auto-hébergées (fonts/) : une seule police d'identité, DM Mono. Interface : police système. */
+@font-face { font-family: 'DM Mono'; font-weight: 400; font-style: normal; font-display: swap; src: url(fonts/dm-mono-400.woff2) format('woff2'); }
+@font-face { font-family: 'DM Mono'; font-weight: 500; font-style: normal; font-display: swap; src: url(fonts/dm-mono-500.woff2) format('woff2'); }
+
 :root {
-  --accent: #C0392B;
-  --accent-hover: #9B2D22;
-  --accent-fg: #ffffff;
-  --bg: #1C1C1E;
-  --fg: rgba(255, 255, 255, 0.88);
-  --muted: rgba(255, 255, 255, 0.55);
-  --icon: #8E8E93;
-  --hover: rgba(255, 255, 255, 0.07);
-  --selected: rgba(192, 57, 43, 0.22);
-  --selected-fg: #E8887E;
-  --border: rgba(196, 201, 209, 0.18);
+  /* Palette du jeu : 4 verts Game Boy + rose fluo (identique à PALETTE dans js/sprites.js) */
+  --gb0: #0F380F; --gb1: #306230; --gb2: #8BAC0F; --gb3: #9BBC0F; --fluo: #FF3CAC;
+  /* Interface (réglages, fenêtres, atelier) : habillée avec la même palette */
+  --accent: var(--fluo);
+  --accent-fg: var(--gb0);
+  --bg: var(--gb0);
+  --fg: var(--gb3);
+  --muted: var(--gb2);
+  --icon: var(--gb2);
+  --hover: var(--gb1);
+  --selected: var(--gb1);
+  --selected-fg: var(--gb3);
+  --border: var(--gb1);
+  --panel: var(--gb1);
+  --overlay: rgba(15, 56, 15, 0.8);
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --font-sans: 'Inter', sans-serif;
-  --font-title: 'Playfair Display', Georgia, serif;
-  --font-mono: 'DM Mono', monospace;
-  --overlay: rgba(0, 0, 0, 0.40);
-  --panel: #2a2a2d;
-  /* Palette du jeu : 4 verts Game Boy + rose fluo (identique à PALETTE dans js/sprites.js) */
-  --gb0: #0F380F; --gb1: #306230; --gb2: #8BAC0F; --gb3: #9BBC0F; --fluo: #FF3CAC;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-title: 'DM Mono', ui-monospace, monospace;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+  /* Variables lues par js/lib/game.css */
+  --jeu-fond: var(--gb0); --jeu-encre: var(--gb3); --jeu-police: var(--font-sans); --jeu-cible: 44px;
   color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
-body {
-  display: flex; flex-direction: column;
-  background: var(--bg); color: var(--fg);
-  font: 400 0.9375rem/1.4 var(--font-sans);
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-}
 [hidden] { display: none !important; }
-button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
 h1, h2, h3, p { margin: 0; }
-
-/* En-tête */
-.app-header {
-  display: flex; align-items: center; justify-content: space-between;
-  min-height: 52px; padding: 0 12px; border-bottom: 1px solid var(--border);
-}
-.brand {
-  display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px;
-  font: 700 1.4rem var(--font-title); color: var(--fg); text-decoration: none; letter-spacing: 0.02em;
-}
+body { font: 400 0.9375rem/1.4 var(--font-sans); }
 .icon-btn {
   width: 44px; height: 44px; display: inline-grid; place-items: center;
   background: transparent; border: 0; border-radius: var(--radius-md); color: var(--icon); font-size: 1.35rem;
 }
-.icon-btn:hover { background: var(--hover); color: var(--fg); }
+@media (hover: hover) { .icon-btn:hover { background: var(--hover); color: var(--fg); } }
 
-/* Scène */
-.stage-area { flex: 1; min-height: 0; container-type: size; display: grid; place-items: center; padding: 8px 0; }
-.stage {
-  position: relative; overflow: hidden; container-type: inline-size;
-  width: min(100cqw, 62.5cqh); aspect-ratio: 200 / 320;
-  border-radius: var(--radius-lg); background: var(--gb0); border: 1px solid var(--border);
+/* Plein écran : le canvas couvre tout l'écran (taille fixée par main.js, échelle entière) ;
+   le HUD et les commandes forment une colonne centrée par-dessus, hors des bandes de l'écran. */
+.jeu-ecran { background: var(--gb1); }
+#game { position: absolute; left: 0; top: 0; image-rendering: pixelated; touch-action: none; }
+.column {
+  position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: min(100%, max(62.5dvh, 360px)); container-type: inline-size; pointer-events: none;
 }
-#game { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; }
+.gear {
+  position: absolute; top: calc(env(safe-area-inset-top, 0px) + 1.4cqw); right: 2cqw; pointer-events: auto;
+  width: 44px; height: 44px; display: grid; place-items: center; padding: 0; font-size: 1.35rem;
+  background: var(--gb0); color: var(--gb3); border: 1px solid var(--gb1); border-radius: var(--radius-md);
+}
+body.paused .hud, body.paused .controls, body.paused .msg, body.paused .event { display: none; }
 
-.hud { position: absolute; inset: 0 0 auto 0; padding: 2.4cqw 3cqw; pointer-events: none; color: var(--gb3); text-shadow: 0 1px 0 var(--gb0), 1px 0 0 var(--gb0); font-family: var(--font-mono); }
-.hud-row { display: flex; justify-content: space-between; align-items: baseline; }
+.hud { position: absolute; inset: 0 0 auto 0; padding: calc(2.4cqw + env(safe-area-inset-top, 0px)) 3cqw 0; pointer-events: none; color: var(--gb3); text-shadow: 0 1px 0 var(--gb0), 1px 0 0 var(--gb0); font-family: var(--font-mono); }
+.hud-row { display: flex; justify-content: space-between; align-items: baseline; padding-right: 50px; }
 .hud-alt { font-size: 7.5cqw; font-weight: 500; line-height: 1.1; }
 .hud-alt small { font-size: 3.6cqw; opacity: 0.85; }
 .hud-clock { font-size: 3.4cqw; opacity: 0.95; display: flex; align-items: center; gap: 1cqw; }
@@ -79,7 +71,7 @@ h1, h2, h3, p { margin: 0; }
 .chip-weather i { color: var(--fluo); }
 
 .msg {
-  position: absolute; left: 4cqw; right: 4cqw; bottom: 4cqw; text-align: center;
+  position: absolute; left: 4cqw; right: 4cqw; bottom: calc(var(--ctrl-h, 150px) + 2.4cqw); text-align: center;
   padding: 2cqw 3cqw; border-radius: var(--radius-md); background: var(--gb0); color: var(--gb3); border: 1px solid var(--gb2);
   font-size: 3.8cqw; font-family: var(--font-mono); opacity: 0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s; pointer-events: none;
 }
@@ -99,30 +91,29 @@ h1, h2, h3, p { margin: 0; }
 .event span { display: block; font-size: 3.2cqw; line-height: 1.3; }
 .event.bad { background: var(--fluo); }
 
-/* Accueil */
-.home {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3cqw;
-  padding: 6cqw; text-align: center; background: var(--gb3); color: var(--gb0);
+/* Écran titre : plein écran, aux couleurs du jeu */
+.home { position: absolute; inset: 0; display: grid; place-items: center; background: var(--gb3); color: var(--gb0); }
+.home-in {
+  container-type: inline-size; width: min(100%, max(62.5dvh, 360px)); display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3cqw; padding: 6cqw; text-align: center;
 }
-.home h1 { font: 700 30cqw/1 var(--font-mono); letter-spacing: 0.04em; color: var(--gb0); text-shadow: 1.5cqw 1.5cqw 0 var(--fluo); margin-bottom: 6cqw; }
+.home h1 { font: 500 30cqw/1 var(--font-mono); letter-spacing: 0.04em; color: var(--gb0); text-shadow: 1.5cqw 1.5cqw 0 var(--fluo); margin-bottom: 6cqw; }
 .records { font: 400 3.4cqw var(--font-mono); color: var(--gb1); min-height: 1em; }
 .home .btn { width: min(100%, 64cqw); background: var(--gb0); color: var(--gb3); border: 0; border-radius: 2px; font-family: var(--font-mono); }
-.home .btn:hover { background: var(--gb1); }
-.home .btn-primary { background: var(--fluo); color: var(--gb0); font-weight: 600; }
-.home .btn-primary:hover { background: var(--fluo); filter: brightness(1.08); }
+.home .btn-primary { background: var(--fluo); color: var(--gb0); font-weight: 500; }
 
 /* Boutons */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px;
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); font-weight: 500; font-size: 0.9rem;
 }
-.btn:hover { background: #343438; }
+.btn-primary { filter: none; }
+@media (hover: hover) { .btn:hover { filter: brightness(1.12); } }
 .btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
-.btn-primary:hover { background: var(--accent-hover); }
 .btn i { font-size: 1.15rem; }
 
 /* Commandes */
-.controls { padding: 6px 12px 10px; display: grid; gap: 8px; width: min(100%, 520px); margin: 0 auto; user-select: none; -webkit-user-select: none; }
+.controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; pointer-events: auto; user-select: none; -webkit-user-select: none; }
 .actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .act {
   min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
@@ -138,7 +129,6 @@ h1, h2, h3, p { margin: 0; }
 }
 .step i { font-size: 1.8rem; }
 .step:active { filter: brightness(0.85); }
-body.paused .controls { opacity: 0.35; pointer-events: none; }
 
 /* Modales */
 dialog.modal {
@@ -150,7 +140,7 @@ dialog.modal-narrow { width: min(92vw, 360px); }
 dialog.modal-wide { width: min(96vw, 560px); }
 dialog.modal[open] { display: flex; flex-direction: column; gap: 16px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; }
-.modal h2 { font: 700 1.25rem var(--font-title); }
+.modal h2 { font: 500 1.25rem var(--font-title); }
 .block { display: grid; gap: 8px; }
 .block h3 { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
 .block.bottom { border-top: 1px solid var(--border); padding-top: 14px; }
@@ -191,12 +181,12 @@ dialog.modal[open] { display: flex; flex-direction: column; gap: 16px; }
 .tool:disabled { opacity: 0.35; }
 .palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .swatch { min-height: 44px; border: 2px solid transparent; border-radius: var(--radius-sm); padding: 0; }
-.swatch[aria-pressed="true"] { border-color: #fff; outline: 2px solid var(--accent); }
+.swatch[aria-pressed="true"] { border-color: var(--gb3); outline: 2px solid var(--accent); }
 .swatch.clear { background: repeating-conic-gradient(#555 0 25%, #333 0 50%) 0 0 / 10px 10px; }
 .patterns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .pattern { min-height: 44px; display: grid; place-items: center; padding: 0; background: var(--gb1); border: 2px solid transparent; border-radius: var(--radius-sm); }
 .pattern canvas { width: 36px; height: 36px; image-rendering: pixelated; }
-.pattern[aria-pressed="true"] { border-color: #fff; outline: 2px solid var(--accent); }
+.pattern[aria-pressed="true"] { border-color: var(--gb3); outline: 2px solid var(--accent); }
 .ed-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Sac */
@@ -233,12 +223,12 @@ dialog.modal[open] { display: flex; flex-direction: column; gap: 16px; }
 .inv li span { flex: 1; }
 .inv li b { font: 500 0.95rem var(--font-mono); }
 .inv li small { display: block; color: var(--muted); font-size: 0.72rem; }
-.inv li.low b { color: #E8887E; }
+.inv li.low b { color: var(--fluo); }
 
 /* Toast : popover, pour passer au-dessus des modales */
 .toast {
   position: fixed; inset: auto auto calc(24px + env(safe-area-inset-bottom, 0px)) 50%; transform: translateX(-50%); margin: 0;
-  max-width: 90vw; padding: 10px 16px; border: 0; border-radius: var(--radius-lg); background: #3a3a3e; color: #fff; font-size: 0.88rem;
+  max-width: 90vw; padding: 10px 16px; border: 0; border-radius: var(--radius-lg); background: var(--gb0); color: var(--gb3); border: 1px solid var(--gb2); font-size: 0.88rem;
 }
 
 @media (min-width: 900px) {

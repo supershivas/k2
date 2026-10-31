@@ -1,0 +1,16 @@
+{
+  "name": "K2",
+  "short_name": "K2",
+  "description": "Grimpe le K2 en pixel art, seul face aux éléments.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#0F380F",
+  "theme_color": "#0F380F",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

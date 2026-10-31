@@ -2,29 +2,36 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0F380F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="K2">
   <title>K2</title>
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon.ico" sizes="48x48">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Playfair+Display:wght@700&display=swap">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <link rel="stylesheet" href="mobile.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/icons.css?v=1.5.0">
+  <link rel="stylesheet" href="js/lib/game.css?v=1.5.0">
+  <link rel="stylesheet" href="style.css?v=1.5.0">
 </head>
 <body>
-  <header class="app-header safe-top">
-    <a class="brand" id="brand" href="#accueil">K2</a>
-    <button class="icon-btn" id="open-settings" type="button" aria-label="Réglages"><i class="ti ti-settings"></i></button>
-  </header>
+  <div class="jeu-ecran" id="screen">
+    <canvas id="game" aria-label="Paroi du K2"></canvas>
 
-  <main class="stage-area">
-    <div class="stage" id="stage">
-      <canvas id="game" aria-label="Paroi du K2"></canvas>
+    <section class="home" id="home">
+      <div class="home-in">
+        <h1>K2</h1>
+        <button class="btn btn-primary" id="btn-play" type="button"><i class="ti ti-mountain"></i><span id="btn-play-label">Grimper</span></button>
+        <button class="btn" id="btn-new" type="button" hidden><i class="ti ti-refresh"></i> Nouvelle ascension</button>
+        <button class="btn" id="btn-editor" type="button"><i class="ti ti-pencil"></i> Éditeur de sprites</button>
+        <p class="records" id="records"></p>
+      </div>
+    </section>
 
+    <div class="column" id="column">
       <div class="hud" id="hud">
         <div class="hud-row hud-top">
           <div class="hud-alt"><span id="h-alt">0</span><small> m</small></div>
@@ -43,36 +50,32 @@
           <span class="chip chip-weather" id="chip-snow" hidden><i class="ti ti-snowflake"></i></span>
         </div>
       </div>
+      <button class="gear" id="open-settings" type="button" aria-label="Réglages"><i class="ti ti-settings"></i></button>
       <div class="msg" id="msg" role="status" aria-live="polite"></div>
       <div class="event" id="event" role="status" aria-live="polite"><i class="ti ti-compass" id="ev-icon"></i><div><b id="ev-title"></b><span id="ev-text"></span></div></div>
 
-      <section class="home" id="home">
-        <h1>K2</h1>
-        <button class="btn btn-primary" id="btn-play" type="button"><i class="ti ti-mountain"></i><span id="btn-play-label">Grimper</span></button>
-        <button class="btn" id="btn-editor" type="button"><i class="ti ti-pencil"></i> Éditeur de sprites</button>
-        <p class="records" id="records"></p>
-      </section>
+      <footer class="controls" id="controls">
+        <div class="actions">
+          <button class="act" id="b-piton" type="button"><i class="ti ti-anchor"></i><span id="b-piton-label">Piton</span></button>
+          <button class="act" id="b-eat" type="button"><i class="ti ti-meat"></i><span>Manger</span></button>
+          <button class="act" id="b-o2" type="button"><i class="ti ti-bottle"></i><span>O₂</span></button>
+          <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span id="b-camp-label">Camper</span></button>
+          <button class="act" id="b-bag" type="button"><i class="ti ti-backpack"></i><span>Sac</span></button>
+        </div>
+        <div class="steps">
+          <button class="step" id="b-left" type="button"><i class="ti ti-chevron-left"></i><span>Gauche</span></button>
+          <button class="step" id="b-right" type="button"><span>Droite</span><i class="ti ti-chevron-right"></i></button>
+        </div>
+      </footer>
     </div>
-  </main>
-
-  <footer class="controls safe-bottom" id="controls">
-    <div class="actions">
-      <button class="act" id="b-piton" type="button"><i class="ti ti-anchor"></i><span id="b-piton-label">Piton</span></button>
-      <button class="act" id="b-eat" type="button"><i class="ti ti-meat"></i><span>Manger</span></button>
-      <button class="act" id="b-o2" type="button"><i class="ti ti-bottle"></i><span>O₂</span></button>
-      <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span id="b-camp-label">Camper</span></button>
-      <button class="act" id="b-bag" type="button"><i class="ti ti-backpack"></i><span>Sac</span></button>
-    </div>
-    <div class="steps">
-      <button class="step" id="b-left" type="button"><i class="ti ti-chevron-left"></i><span>Gauche</span></button>
-      <button class="step" id="b-right" type="button"><span>Droite</span><i class="ti ti-chevron-right"></i></button>
-    </div>
-  </footer>
+  </div>
 
   <dialog id="settings" class="modal">
     <div class="modal-head"><h2>Réglages</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
     <section class="block">
       <h3>Partie</h3>
+      <button class="btn" id="s-title" type="button"><i class="ti ti-mountain"></i> Écran titre</button>
+      <button class="btn" id="s-fullscreen" type="button" hidden><i class="ti ti-maximize"></i> Plein écran</button>
       <button class="btn" id="s-new" type="button"><i class="ti ti-refresh"></i> Nouvelle ascension</button>
       <button class="btn" id="s-editor" type="button"><i class="ti ti-pencil"></i> Éditeur de sprites</button>
     </section>
@@ -181,6 +184,6 @@
   </dialog>
 
   <div class="toast" id="toast" popover="manual" role="status" aria-live="polite"></div>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=1.5.0"></script>
 </body>
 </html>

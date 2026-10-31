@@ -2,6 +2,8 @@
 // (index 0 à 4), -1 = transparent. Un sprite = { w, h, px }.
 // Priorité de chargement : édition locale > sprites.json du dépôt > défauts.
 
+import { store } from './store.js?v=1.5.0';
+
 export const PALETTE = ['#0F380F', '#306230', '#8BAC0F', '#9BBC0F', '#FF3CAC'];
 
 export const MAX_SIZE = 32;
@@ -128,23 +130,12 @@ export const DEFAULTS = {
   grotte: makeCave(),
 };
 
-const KEYS = { local: 'k2:sprites', token: 'k2:github-token' };
-
 let sprites = clone(DEFAULTS);
 let userEdits = {}; // sprites modifiés localement (seuls ceux-là sont exportés / publiés en priorité)
 const cache = {};
 const listeners = new Set();
 
 function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
-
-function storageGet(key) {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-function storageSet(key, value) {
-  try {
-    if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
-  } catch { /* stockage indisponible : l'édition reste en mémoire */ }
-}
 
 function isValidSprite(sp) {
   return !!sp && Number.isInteger(sp.w) && Number.isInteger(sp.h)
@@ -184,7 +175,7 @@ export function setSprite(id, sp) {
   sprites[id] = { w: sp.w, h: sp.h, px: sp.px.slice() };
   userEdits[id] = clone(sprites[id]);
   delete cache[id];
-  storageSet(KEYS.local, JSON.stringify(userEdits));
+  store.save('sprites', userEdits);
   notify();
 }
 
@@ -192,7 +183,7 @@ export function resetSprite(id) {
   sprites[id] = clone(DEFAULTS[id]);
   delete userEdits[id];
   delete cache[id];
-  storageSet(KEYS.local, Object.keys(userEdits).length ? JSON.stringify(userEdits) : null);
+  if (Object.keys(userEdits).length) store.save('sprites', userEdits); else store.clear('sprites');
   notify();
 }
 
@@ -200,7 +191,7 @@ export function resetAllSprites() {
   sprites = clone(DEFAULTS);
   userEdits = {};
   for (const k of Object.keys(cache)) delete cache[k];
-  storageSet(KEYS.local, null);
+  store.clear('sprites');
   notify();
 }
 
@@ -231,7 +222,7 @@ export async function loadSprites() {
     if (res.ok) Object.assign(sprites, sanitize(await res.json()));
   } catch { /* pas de sprites.json publié : défauts */ }
   try {
-    const local = sanitize(JSON.parse(storageGet(KEYS.local) || '{}'));
+    const local = sanitize(store.load('sprites') || {});
     Object.assign(sprites, local);
     userEdits = local;
   } catch { /* édition locale illisible : ignorée */ }
@@ -245,8 +236,8 @@ export function importSprites(obj) {
   return Object.keys(valid).length;
 }
 
-export function getToken() { return storageGet(KEYS.token) || ''; }
-export function setToken(token) { storageSet(KEYS.token, token ? token : null); }
+export function getToken() { return store.getSecret('github-token'); }
+export function setToken(token) { store.setSecret('github-token', token); }
 
 // Publie sprites.json dans le dépôt (le jeton reste dans ce navigateur, jamais commité).
 export async function publishSprites(token) {

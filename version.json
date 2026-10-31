@@ -1,9 +1,9 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "date": "2026-10-31",
   "changes": [
-    "Mini-puzzles pendant l'ascension : lire la paroi, équilibre sur une vire, réparer le réchaud",
-    "10 reliques de l'histoire de l'escalade à trouver (appareil photo de Mallory, piolet d'Irvine…)",
-    "XP, niveaux et arbre de talents (Endurance, Technique, Survie) dans le sac"
+    "Le jeu passe en plein écran, sans en-tête ni bandes, sur téléphone comme sur ordinateur (installable)",
+    "Le héros n'a plus de fond sombre derrière lui",
+    "Polices et icônes intégrées au jeu, sauvegarde versionnée, pause quand on quitte la fenêtre"
   ]
 }

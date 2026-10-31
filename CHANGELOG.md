@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0 — 2026-10-31
+- Le jeu passe en plein écran, sans en-tête ni bandes, sur téléphone comme sur ordinateur (installable)
+- Le héros n'a plus de fond sombre derrière lui
+- Polices et icônes intégrées au jeu, sauvegarde versionnée, pause quand on quitte la fenêtre
+
 ## 1.4.0 — 2026-10-31
 - Mini-puzzles pendant l'ascension : lire la paroi, équilibre sur une vire, réparer le réchaud
 - 10 reliques de l'histoire de l'escalade à trouver (appareil photo de Mallory, piolet d'Irvine…)

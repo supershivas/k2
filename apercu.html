@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aperçu téléphone — K2</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  /* L'aperçu (section 20) : le jeu dans une iframe à la VRAIE taille d'un
+     téléphone, jamais réduit par transform: scale() (qui ment sur les media
+     queries, innerWidth et la taille des cibles). Sur une fenêtre trop
+     courte, la page défile : le châssis ne rétrécit jamais. */
+  html, body { margin: 0; min-height: 100%; background: #2b2b2e; font: 14px system-ui, sans-serif; color: #ddd; }
+  body { display: grid; justify-items: center; gap: 12px; padding: 24px 12px; }
+  .chassis { padding: 12px; border-radius: 56px; background: #0b0b0c; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  iframe { display: block; border: 0; border-radius: 44px; background: #000; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  nav a { color: inherit; padding: 10px 14px; border: 1px solid #555; border-radius: 22px; text-decoration: none; }
+  nav a[aria-current] { background: #ddd; color: #111; }
+</style>
+</head>
+<body>
+<nav id="formats"></nav>
+<div class="chassis"><iframe id="jeu" title="K2" allow="gamepad; fullscreen; autoplay"></iframe></div>
+<script>
+  const FORMATS = {
+    'iphone-se': { w: 375, h: 667, nom: 'iPhone SE' },
+    'iphone-14': { w: 390, h: 844, nom: 'iPhone 14' },
+    'pixel-7': { w: 412, h: 915, nom: 'Pixel 7' },
+    'paysage': { w: 844, h: 390, nom: 'Paysage' },
+  };
+  const p = new URLSearchParams(location.search);
+  const choix = FORMATS[p.get('format')] ? p.get('format') : 'iphone-14';
+  const f = FORMATS[choix];
+  const jeu = document.getElementById('jeu');
+  jeu.width = f.w; jeu.height = f.h;
+  const cible = new URLSearchParams(location.search); cible.delete('format');
+  jeu.src = 'index.html' + (cible.toString() ? '?' + cible : '');
+  document.getElementById('formats').innerHTML = Object.entries(FORMATS).map(([k, v]) =>
+    `<a href="?format=${k}"${k === choix ? ' aria-current="true"' : ''}>${v.nom}</a>`).join('');
+</script>
+</body>
+</html>

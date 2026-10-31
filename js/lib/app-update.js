@@ -1,16 +1,20 @@
-/* ─── Version et mise à jour automatique — partagé entre les apps ────────────
-   Source de vérité : supershivas/design-system/app-update.js
-   Mis à jour par scripts/sync-design-system.sh dans chaque app qui l'utilise.
+/* ─── Version et mise à jour automatique — partagé entre les jeux ───────────
+   Source de vérité : supershivas/game-system/modules/app-update.js
+   Mis à jour par scripts/sync-game-system.sh dans chaque jeu qui l'utilise.
    Applique les sections 2 à 4 de CONVENTIONS.md : version.json, CHANGELOG.md,
    vérification au retour au premier plan et toutes les 5 minutes, rechargement
-   seulement hors saisie, toast « Mis à jour en vX.Y.Z » après rechargement.
+   seulement quand le jeu n'est pas « occupé », toast « Mis à jour en vX.Y.Z ».
 
    Module ES sans dépendance :
-     import { startUpdateCheck, loadChangelog } from './app-update.js'
-     startUpdateCheck({ onUpdated: v => toast(`Mis à jour en v${v}`) })
+     import { startUpdateCheck, loadChangelog } from './lib/app-update.js?v=1.5.0'
+     startUpdateCheck({
+       isBusy: () => partieEnCours && !enPause,   // une partie qui tourne
+       beforeReload: () => sauvegarder(),         // rien ne se perd
+       onUpdated: v => toast(`Mis à jour en v${v}`),
+     })
      const entries = await loadChangelog()   // 5 dernières versions
    Les URL par défaut sont relatives au document (version.json, CHANGELOG.md) :
-   passer versionUrl / changelogUrl si l'app est servie ailleurs.
+   passer versionUrl / changelogUrl si le jeu est servi ailleurs.
    ─────────────────────────────────────────────────────────────────────────── */
 
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -25,6 +29,8 @@ async function fetchVersion(url) {
 }
 
 // Une saisie est en cours : champ ou éditeur focalisé, ou modale ouverte.
+// Un jeu passe en plus son propre `isBusy` (partie en cours hors pause) ;
+// `isBusyDefault` reste vérifié dans tous les cas.
 export function isBusyDefault() {
   const el = document.activeElement;
   if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return true;
@@ -35,9 +41,11 @@ export function isBusyDefault() {
 // chargement qui suit une mise à jour, pour afficher le toast.
 export function startUpdateCheck({
   versionUrl = 'version.json',
-  isBusy = isBusyDefault,
+  isBusy = () => false,
+  beforeReload,
   onUpdated,
 } = {}) {
+  const busy = () => isBusyDefault() || !!isBusy();
   try {
     const updatedTo = sessionStorage.getItem(UPDATED_FLAG);
     if (updatedTo) {
@@ -53,11 +61,12 @@ export function startUpdateCheck({
 
   function reloadWhenIdle(next) {
     if (reloading) return;
-    if (isBusy()) {
+    if (busy()) {
       setTimeout(() => reloadWhenIdle(next), BUSY_RETRY_MS);
       return;
     }
     reloading = true;
+    try { if (beforeReload) beforeReload(); } catch { /* la sauvegarde a échoué : on recharge quand même */ }
     try { sessionStorage.setItem(UPDATED_FLAG, next); } catch { /* voir plus haut */ }
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
       navigator.serviceWorker.getRegistration()
@@ -118,7 +127,7 @@ export async function loadChangelog(changelogUrl = 'CHANGELOG.md', count = 5) {
   }
 }
 
-// Télécharge `data` en JSON (export des Réglages).
+// Télécharge `data` en JSON (export de la sauvegarde, dans les Réglages).
 export function downloadJSON(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
