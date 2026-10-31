@@ -1,15 +1,16 @@
 // Cycle de vie du jeu : écran titre → partie → réglages ; plein écran, boucle à pas fixe, sauvegarde, debug.
-import { Game, SUMMIT } from './game.js?v=1.6.0';
-import { store, DEBUG } from './store.js?v=1.6.0';
-import { createLoop } from './lib/loop.js?v=1.6.0';
-import { createKeys, stopTypeahead, DIRECTIONS } from './lib/keys.js?v=1.6.0';
-import { lockBrowserGestures } from './lib/pointer.js?v=1.6.0';
-import { autosave } from './lib/save.js?v=1.6.0';
-import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from './lib/app-update.js?v=1.6.0';
-import { loadSprites, getToken, setToken, publishSprites, paintSprite, getSprite } from './sprites.js?v=1.6.0';
-import { initBag, openBag } from './bag.js?v=1.6.0';
-import { runPuzzle } from './puzzles.js?v=1.6.0';
-import { initEditor, openEditor } from './editor.js?v=1.6.0';
+import { Game, SUMMIT } from './game.js?v=1.7.0';
+import { store, DEBUG } from './store.js?v=1.7.0';
+import { createLoop } from './lib/loop.js?v=1.7.0';
+import { createKeys, DIRECTIONS } from './lib/keys.js?v=1.7.0';
+import { lockTypeahead } from './typeahead.js?v=1.7.0';
+import { lockBrowserGestures, createPointer } from './lib/pointer.js?v=1.7.0';
+import { autosave } from './lib/save.js?v=1.7.0';
+import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from './lib/app-update.js?v=1.7.0';
+import { loadSprites, getToken, setToken, publishSprites, paintSprite, getSprite } from './sprites.js?v=1.7.0';
+import { initBag, openBag } from './bag.js?v=1.7.0';
+import { runPuzzle } from './puzzles.js?v=1.7.0';
+import { initEditor, openEditor } from './editor.js?v=1.7.0';
 
 const $ = id => document.getElementById(id);
 
@@ -209,6 +210,9 @@ function updateHud() {
 // Les boutons disent quel membre ils vont déplacer : la prochaine prise (main ou pied), ou l'esquive
 const hintCache = { L: '', R: '' };
 function updateMoveHints() {
+  const away = Math.round(Math.abs(game.camOffset));
+  $('b-recenter').hidden = !(game.scrolled && game.playing);
+  $('rc-label').textContent = `${away} m ${game.camOffset < 0 ? 'plus bas' : 'plus haut'}`;
   const nm = game.playing ? game.nextMove() : null;
   const th = game.playing ? game.threat : null;
   for (const side of ['L', 'R']) {
@@ -235,7 +239,9 @@ function fit() {
   const cv = $('game');
   cv.style.width = `${r.cssW}px`;
   cv.style.height = `${r.cssH}px`;
+  cssPerMeter = (2 * r.scale) / dpr; // K = 2 px logiques par mètre
 }
+let cssPerMeter = 4;
 window.addEventListener('resize', fit);
 window.visualViewport?.addEventListener('resize', fit);
 window.addEventListener('orientationchange', fit);
@@ -245,7 +251,7 @@ const modalOpen = () => !!document.querySelector('dialog[open]');
 let blurred = false, hudAt = 0, lastFrame = performance.now();
 const ptrHold = { L: false, R: false }; // boutons à l'écran
 const keys = createKeys({
-  actions: { piton: ['p', ' ', 'ArrowDown'], eat: 'e', o2: 'o', camp: 'c', bag: 'i', meteo: 'm', map: 'k' },
+  actions: { piton: ['p', ' ', 'ArrowDown'], eat: 'e', o2: 'o', camp: 'c', bag: 'i', meteo: 'm', map: 'k', lookUp: 'PageUp', lookDown: 'PageDown', recenter: 'Home' },
   onAction: name => {
     if (modalOpen()) return;
     if (name === 'piton') game.plantPiton();
@@ -255,9 +261,12 @@ const keys = createKeys({
     else if (name === 'bag') openBag('inv');
     else if (name === 'meteo') openBag('meteo');
     else if (name === 'map') openBag('map');
+    else if (name === 'lookUp') game.scrollBy(30);
+    else if (name === 'lookDown') game.scrollBy(-30);
+    else if (name === 'recenter') game.recenter();
   },
 });
-stopTypeahead();
+lockTypeahead();
 
 // Un pas à chaque appui d'une flèche (touche physique : ZQSD en AZERTY, WASD en QWERTY).
 window.addEventListener('keydown', e => {
@@ -315,6 +324,17 @@ press($('b-o2'), () => game.toggleOxygen());
 press($('b-camp'), () => game.camp());
 $('b-bag').addEventListener('click', () => { if (game.playing) openBag(); });
 lockBrowserGestures($('screen'));
+
+// Caméra libre : glisser le doigt (ou la souris), molette, PageUp / PageDown — pour revoir le chemin parcouru.
+const canLook = () => game.playing && game.mode === 'face' && !modalOpen();
+let dragY = 0;
+createPointer($('game'), {
+  threshold: 8,
+  onDragStart: p => { dragY = p.y; },
+  onDrag: p => { if (canLook()) game.scrollBy((p.y - dragY) / cssPerMeter); dragY = p.y; },
+  onWheel: ({ delta }) => { if (canLook()) game.scrollBy(-delta * 20); },
+});
+$('b-recenter').addEventListener('click', () => game.recenter());
 
 // ── Navigation et écrans ─────────────────────────────────────────────────
 $('btn-play').addEventListener('click', play);
@@ -408,7 +428,7 @@ async function reloadFromStore() {
 
 // ── Mode debug : ?debug=1 (section 18) ───────────────────────────────────
 async function installDebugMode() {
-  const { installDebug } = await import('./lib/debug.js?v=1.6.0');
+  const { installDebug } = await import('./lib/debug.js?v=1.7.0');
   const places = { base: { a: 0 } };
   game.walks.forEach(w => { places[`pente${w.id + 1}`] = { a: w.a - 3 }; });
   game.puzzles.forEach(p => { places[`puzzle${p.id + 1}`] = { a: p.a - 3 }; });

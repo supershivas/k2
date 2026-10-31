@@ -1,7 +1,7 @@
 // 30 événements aléatoires qui ponctuent l'ascension. Chacun a une condition d'apparition (`when`),
 // un effet (`run`) et le résumé de cet effet (`fx`) affiché dans le bandeau.
 // g = le jeu : g.s (état), g.weather, g.daylight, g.temperature, g.gain(), g.shake…
-import { SUMMIT } from './game.js?v=1.6.0';
+import { SUMMIT } from './game.js?v=1.7.0';
 
 const hourOf = g => (g.s.min % 1440) / 60;
 

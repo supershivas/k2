@@ -6,7 +6,7 @@
    d'équilibrage ou un bug se rejouent à l'identique.
 
    Module ES sans dépendance (fonctionne aussi dans Node, pour les tests) :
-     import { createRng, hashSeed, dailySeed } from './lib/rng.js?v=1.6.0'
+     import { createRng, hashSeed, dailySeed } from './lib/rng.js?v=1.7.0'
      const rng = createRng(1234)        // ou createRng('nom-du-monde')
      rng()                // [0, 1[
      rng.int(1, 6)        // entier entre 1 et 6 inclus

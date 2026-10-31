@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — 2026-10-31
+- On peut faire défiler la paroi (glisser, molette, PageUp / PageDown) pour revoir le chemin parcouru, avec un bouton pour revenir au joueur
+- La recherche de Firefox ne se déclenche plus quand on tape en jouant, y compris dans l'aperçu
+
 ## 1.6.0 — 2026-10-31
 - La montée suit des prises visibles : main ou pied, à gauche ou à droite, parfois deux fois du même côté
 - Les boutons Gauche / Droite indiquent le membre à bouger ; un faux pas coûte de l'énergie, trois font glisser

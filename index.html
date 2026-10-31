@@ -13,9 +13,9 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon.ico" sizes="48x48">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="css/icons.css?v=1.6.0">
-  <link rel="stylesheet" href="js/lib/game.css?v=1.6.0">
-  <link rel="stylesheet" href="style.css?v=1.6.0">
+  <link rel="stylesheet" href="css/icons.css?v=1.7.0">
+  <link rel="stylesheet" href="js/lib/game.css?v=1.7.0">
+  <link rel="stylesheet" href="style.css?v=1.7.0">
 </head>
 <body>
   <div class="jeu-ecran" id="screen">
@@ -50,6 +50,7 @@
           <span class="chip chip-weather" id="chip-snow" hidden><i class="ti ti-snowflake"></i></span>
         </div>
       </div>
+      <button class="recenter" id="b-recenter" type="button" hidden aria-label="Revenir au joueur"><i class="ti ti-current-location"></i><span><b>Revenir au joueur</b><small id="rc-label"></small></span></button>
       <button class="gear" id="open-settings" type="button" aria-label="Réglages"><i class="ti ti-settings"></i></button>
       <div class="msg" id="msg" role="status" aria-live="polite"></div>
       <div class="event" id="event" role="status" aria-live="polite"><i class="ti ti-compass" id="ev-icon"></i><div><b id="ev-title"></b><span id="ev-text"></span></div></div>
@@ -184,6 +185,6 @@
   </dialog>
 
   <div class="toast" id="toast" popover="manual" role="status" aria-live="polite"></div>
-  <script type="module" src="js/main.js?v=1.6.0"></script>
+  <script type="module" src="js/main.js?v=1.7.0"></script>
 </body>
 </html>

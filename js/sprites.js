@@ -2,7 +2,7 @@
 // (index 0 à 4), -1 = transparent. Un sprite = { w, h, px }.
 // Priorité de chargement : édition locale > sprites.json du dépôt > défauts.
 
-import { store } from './store.js?v=1.6.0';
+import { store } from './store.js?v=1.7.0';
 
 export const PALETTE = ['#0F380F', '#306230', '#8BAC0F', '#9BBC0F', '#FF3CAC'];
 

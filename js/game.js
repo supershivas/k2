@@ -2,13 +2,13 @@
 // Simulation (altitude, ressources, météo, temps) en unités « logiques » (x de 0 à 100, altitude en mètres),
 // rendu pixel art en palette Game Boy à K fois cette définition : 1 m = K pixels.
 // Deux points de vue : de face sur la paroi, de profil sous un dévers.
-import { PALETTE as P, spriteCanvas } from './sprites.js?v=1.6.0';
-import { drawText } from './pixfont.js?v=1.6.0';
-import { pickEvent } from './events.js?v=1.6.0';
-import { createRng } from './lib/rng.js?v=1.6.0';
-import { limbSequence, STEP, LIMBS } from './holds.js?v=1.6.0';
-import { Progress } from './progress.js?v=1.6.0';
-import { RELICS } from './relics.js?v=1.6.0';
+import { PALETTE as P, spriteCanvas } from './sprites.js?v=1.7.0';
+import { drawText } from './pixfont.js?v=1.7.0';
+import { pickEvent } from './events.js?v=1.7.0';
+import { createRng } from './lib/rng.js?v=1.7.0';
+import { limbSequence, STEP, LIMBS } from './holds.js?v=1.7.0';
+import { Progress } from './progress.js?v=1.7.0';
+import { RELICS } from './relics.js?v=1.7.0';
 
 export const K = 2;
 // Taille LOGIQUE du canvas : elle suit l'écran (plein écran, échelle entière, voir Game.resize).
@@ -282,6 +282,8 @@ export class Game {
     this.limbPos = {}; // où sont les quatre membres, en mètres : { x, a }
     this.dodge = 0; // écart latéral après une esquive, effacé à la prise suivante
     this.errors = 0; // faux pas d'affilée
+    this.camOffset = 0; // caméra libre : mètres au-dessus (+) ou au-dessous (−) du joueur
+    this.pxScale = 1; // pixels écran par pixel logique (échelle entière)
     this.hold = { L: false, R: false }; // boutons maintenus (marche)
     this.puzzles = [];
     this.walks = [];
@@ -321,6 +323,7 @@ export class Game {
     this.canvas.width = W; this.canvas.height = H;
     this.night.width = W; this.night.height = H;
     this.backdrops = {};
+    this.pxScale = sc;
     return { scale: sc, cssW: (W * sc) / dpr, cssH: (H * sc) / dpr };
   }
 
@@ -339,6 +342,7 @@ export class Game {
     this.limbPos = {};
     this.dodge = 0;
     this.errors = 0;
+    this.camOffset = 0;
     this.walks = this.makeWalks(s.seed);
     this.puzzles = this.makePuzzles(s.seed);
     s.puzzleDone = Array.isArray(s.puzzleDone) ? s.puzzleDone : [];
@@ -544,6 +548,16 @@ export class Game {
     }
     return { x: this.route(0) + (limb[1] === 'L' ? -5 : 5), a: 0 };
   }
+  // Caméra libre (vue de face) : on remonte le regard vers le chemin parcouru, ou un peu au-delà du point le plus haut atteint.
+  scrollBy(m) {
+    const s = this.s;
+    this.camOffset = clamp(this.camOffset + m, -s.alt, Math.max(0, (s.top || 0) - s.alt) + 15);
+  }
+  recenter() { this.camOffset = 0; }
+  get scrolled() { return Math.abs(this.camOffset) > 6; }
+  // Où le joueur est à l'écran (la caméra libre l'éloigne du point fixe HERO_Y).
+  heroScreenY() { return HERO_Y - this.camOffset * K; }
+
   // Les membres glissent vers leur prise : on les voit se déplacer un par un.
   moveLimbs(dt) {
     for (const limb of LIMBS) {
@@ -643,6 +657,7 @@ export class Game {
     if (s.energy < 1) { this.say('Épuisé : reprends ton souffle', 'warn'); return; }
     this.frame ^= 1;
     this.lastStep = this.clock;
+    this.camOffset = 0; // agir ramène la caméra sur le joueur
     if (s.ov) { this.stepProfile(side); return; }
 
     // Une pierre tombe vers toi : l'appui du côté opposé esquive (sans avancer)
@@ -789,7 +804,7 @@ export class Game {
     const gust = this.gust.warn > 0 ? 8 : 0;
     const windAx = -(this.weather.wind * 5 + gust);
     this.ropeAcc = Math.min(this.ropeAcc + dt, 0.1);
-    const hero = { x: this.hx, y: this.view + 3 };
+    const hero = { x: this.hx, y: this.view - this.camOffset + 3 };
     while (this.ropeAcc >= 1 / 60) {
       this.ropeAcc -= 1 / 60;
       for (const r of this.ropes) {
@@ -871,7 +886,8 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt);
     const s = this.s;
 
-    this.view += (s.alt - this.view) * Math.min(1, dt * 10);
+    if (this.mode !== 'face') this.camOffset = 0;
+    this.view += (s.alt + this.camOffset - this.view) * Math.min(1, dt * 10);
     if (!s.ov && !s.walk && !this.fall && !this.sleep) s.x = this.route(s.alt);
     this.hx += (s.x + this.dodge - this.hx) * Math.min(1, dt * 14);
     this.moveLimbs(dt);
@@ -1082,9 +1098,11 @@ export class Game {
     if (this.roped) for (const p of s.pitons) if (p.linked && p.a <= s.alt + 2) below.push({ a: p.a, x: p.x, piton: true });
     const target = below.length ? below.reduce((m, c) => (c.a > m.a ? c : m)) : { a: 0, x: 50 };
     s.falls++;
+    this.camOffset = 0;
     s.o2On = false;
     s.ov = null;
     s.walk = null;
+    this.camOffset = 0;
     this.lastSide = null;
     this.fall = { from: s.alt, to: target.a, x: target.x, t: 0, piton: !!target.piton };
     this.say(`${reason} : tu dévisses !`, 'bad');
@@ -1251,12 +1269,19 @@ export class Game {
     if (this.s.ov || this.s.walk) return;
     const k = this.holdIndex;
     const blink = Math.floor(this.clock * 3) % 2;
-    for (let j = Math.max(1, k - 4); j <= k + 7; j++) {
+    const lowest = Math.max(1, Math.floor((this.view - (H - HERO_Y) / K - 6) / STEP));
+    const highest = Math.min(k + 7, Math.floor((this.view + HERO_Y / K + 6) / STEP));
+    for (let j = lowest; j <= highest; j++) {
       const h = this.holdAt(j);
       if (h.a > SUMMIT) break;
       const x = Math.round(h.x * K), y = Math.round(this.ys(h.a));
       if (y < -10 || y > H + 10) continue;
       const ahead = j - k; // 1 = la prochaine
+      if (ahead < -3) { // le chemin parcouru : de simples repères
+        g.fillStyle = P[0]; g.fillRect(x - 3, y - 2, 7, 4);
+        g.fillStyle = P[2]; g.fillRect(x - 2, y - 1, 5, 2);
+        continue;
+      }
       const col = ahead === 1 ? (blink ? P[4] : P[3]) : ahead > 1 && ahead <= 4 ? P[3] : P[2];
       const grow = ahead === 1 ? 1 : 0;
       g.fillStyle = P[0];
@@ -1342,17 +1367,18 @@ export class Game {
 
   drawHero(g, wind) {
     const x = Math.round(this.hx * K - wind * K * Math.sin(this.clock * 6));
+    const hy = Math.round(this.heroScreenY());
     if (this.sleep) {
       if (!this.sleep.cave) {
         const t = spriteCanvas('tent');
-        g.drawImage(t, x - (t.width >> 1), HERO_Y - t.height);
+        g.drawImage(t, x - (t.width >> 1), hy - t.height);
       }
       const z = Math.floor(this.clock * 2) % 3;
-      drawText(g, 'Z', x + 6 + z * 6, HERO_Y - 28 - z * 6, P[4], 2);
+      drawText(g, 'Z', x + 6 + z * 6, hy - 28 - z * 6, P[4], 2);
       return;
     }
     const sp = spriteCanvas('heroA');
-    const top = HERO_Y - sp.height;
+    const top = hy - sp.height;
     if (this.fall) {
       const t = this.fall.t;
       g.save();
@@ -1677,7 +1703,7 @@ export class Game {
       const r0 = (this.sleep ? 40 : 30) * K;
       const side = this.drawnMode !== 'face' && (this.s.ov || this.s.walk);
       const cx = side ? (this.profileHeroX ?? 100) + OX : this.hx * K + OX;
-      const cy = side ? (this.profileHeroY ?? 140) + OY : HERO_Y - 8;
+      const cy = side ? (this.profileHeroY ?? 140) + OY : this.heroScreenY() - 8;
       for (const r of [r0, r0 * 0.7, r0 * 0.4]) {
         n.beginPath(); n.arc(cx, cy, r, 0, Math.PI * 2); n.fill();
       }

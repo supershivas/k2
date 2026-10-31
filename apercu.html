@@ -38,6 +38,14 @@
   jeu.src = 'index.html' + (cible.toString() ? '?' + cible : '');
   document.getElementById('formats').innerHTML = Object.entries(FORMATS).map(([k, v]) =>
     `<a href="?format=${k}"${k === choix ? ' aria-current="true"' : ''}>${v.nom}</a>`).join('');
+  // Le clavier doit aller au jeu, pas à cette page : sinon Firefox lance sa recherche dès qu'on tape.
+  jeu.addEventListener('load', () => jeu.contentWindow.focus());
+  window.addEventListener('pointerdown', () => jeu.contentWindow?.focus());
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.key.length !== 1) return;
+    e.preventDefault();
+    jeu.contentWindow?.focus();
+  }, true);
 </script>
 </body>
 </html>

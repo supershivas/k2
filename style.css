@@ -51,6 +51,15 @@ body { font: 400 0.9375rem/1.4 var(--font-sans); }
   width: 44px; height: 44px; display: grid; place-items: center; padding: 0; font-size: 1.35rem;
   background: var(--gb0); color: var(--gb3); border: 1px solid var(--gb1); border-radius: var(--radius-md);
 }
+.recenter {
+  position: absolute; right: 2cqw; bottom: calc(var(--ctrl-h, 150px) + 3cqw + 52px); pointer-events: auto;
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 10px;
+  background: var(--fluo); color: var(--gb0); border: 2px solid var(--gb0); border-radius: var(--radius-lg);
+}
+.recenter i { font-size: 1.4rem; }
+.recenter span { display: grid; text-align: left; line-height: 1.15; font-size: 0.78rem; }
+.recenter small { font-size: 0.68rem; opacity: 1; }
+body.paused .recenter { display: none; }
 body.paused .hud, body.paused .controls, body.paused .msg, body.paused .event { display: none; }
 
 .hud { position: absolute; inset: 0 0 auto 0; padding: calc(2.4cqw + env(safe-area-inset-top, 0px)) 3cqw 0; pointer-events: none; color: var(--gb3); text-shadow: 0 1px 0 var(--gb0), 1px 0 0 var(--gb0); font-family: var(--font-mono); }

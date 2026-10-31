@@ -40,6 +40,7 @@ Identique entre canvas, HUD, commandes, écran titre ; l'interface (réglages, f
 | Saisir la prise suivante (Gauche / Droite ; maintenir : marcher sur une pente ; côté opposé à une pierre : esquive) | flèches, A/D (touche physique : Q/D en AZERTY) | boutons Gauche / Droite |
 | Piton | Espace, ↓, P | bouton Piton |
 | Manger / O₂ / Camper (ou grotte) | E / O / C | boutons |
+| Revoir le chemin parcouru (caméra libre) | PageUp / PageDown, Home : revenir au joueur | glisser, molette ; bouton « Revenir au joueur » |
 | Sac (inventaire, météo, carte, talents, reliques) | I, M (météo), K (carte) | bouton Sac |
 | Réglages | — | roue crantée en haut à droite |
 
@@ -86,6 +87,9 @@ Debug : `?debug=1[&seed=42]` → `window.__jeu` (`state()`, `teleport('dever1' |
 | design-system des apps (`design-tokens.json`, `mobile.css`, Google Fonts, Tabler CDN) | 1.5.0 | un jeu suit game-system ; une police ou une icône chargée par CDN fait perdre l'identité hors ligne |
 
 ## Pièges connus
+
+- **Recherche Firefox** (v1.7.0) : `stopTypeahead()` de game-system écoute en bulle sur `window` et ne bloque que `keydown`. `js/typeahead.js` écoute en capture, bloque aussi `keypress` et les touches mortes. Dans `apercu.html`, le jeu est dans une iframe : sans focus dans l'iframe, les touches vont à la page parente (et à la recherche) ; l'aperçu redonne le focus au jeu.
+- **Caméra libre** (v1.7.0) : `game.camOffset` (m) s'ajoute à la cible de `view` ; borné entre le sol et le point le plus haut atteint (`s.top`) + 15 m ; remis à 0 par tout pas, toute chute et hors vue de face. Le joueur à l'écran n'est plus à `HERO_Y` fixe : `heroScreenY()`. Les prises plus anciennes que 3 prises se dessinent en simples repères.
 
 - **Montée par prises** (v1.6.0) : `holds.js` donne pour chaque prise j un membre (`hL`, `fR`…) ; `game.holdAt(j)` y ajoute l'altitude (4 m par prise) et la place (`route(a)` ± 5). Le joueur appuie du côté de `nextMove()` ; un mauvais côté coûte 2,5 d'énergie, trois d'affilée font glisser de 12 m (sauf piton). L'altitude de la paroi est donc toujours un multiple de 4 m ; `s.x` suit `route(s.alt)` (plus de déplacement libre). Blocs et glace ne bloquent plus : le parcours les contourne. Objets, grottes et reliques sont posés à côté du parcours. `this.hold` est déjà pris (boutons maintenus) : la méthode s'appelle `holdAt`.
 

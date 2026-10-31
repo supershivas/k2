@@ -1,6 +1,6 @@
 // Éditeur de sprites de taille libre : crayon, gomme, pot de peinture, pipette, miroir, annuler/rétablir,
 // agrandissement ou réduction par chaque côté, et trames (damier, hachures, fusain…).
-import { PALETTE, MAX_SIZE, SPRITE_DEFS, getSprite, setSprite, resetSprite, paintSprite } from './sprites.js?v=1.6.0';
+import { PALETTE, MAX_SIZE, SPRITE_DEFS, getSprite, setSprite, resetSprite, paintSprite } from './sprites.js?v=1.7.0';
 
 const $ = id => document.getElementById(id);
 const MIN_SIZE = 2;
