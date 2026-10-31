@@ -75,8 +75,21 @@ function confirmDialog(title, text, okLabel = 'Confirmer', cancelLabel = 'Annule
 }
 
 // ── Jeu ──────────────────────────────────────────────────────────────────
+// Bandeau d'événement aléatoire (30 possibles, voir events.js)
+let eventTimer;
+function showEvent(ev) {
+  const el = $('event');
+  $('ev-icon').className = `ti ${ev.icon}`;
+  $('ev-title').textContent = ev.title;
+  $('ev-text').textContent = `${ev.text} (${ev.fx})`;
+  el.className = `event show ${ev.bad ? 'bad' : ''}`;
+  clearTimeout(eventTimer);
+  eventTimer = setTimeout(() => el.classList.remove('show'), 5200);
+}
+
 const game = new Game($('game'), {
   say,
+  event: showEvent,
   summit: onSummit,
 });
 
@@ -119,6 +132,7 @@ function showHome() {
   closeAllDialogs();
   game.playing = false;
   game.grip = false;
+  $('event').classList.remove('show');
   $('home').hidden = false;
   document.body.classList.add('paused');
   renderHome();
@@ -156,6 +170,7 @@ function updateHud() {
   const { wind, snow } = game.weather;
   $('chip-wind').hidden = wind < 0.3;
   $('chip-snow').hidden = snow < 0.15;
+  $('b-camp-label').textContent = game.nearCave() ? 'Grotte' : 'Camper';
   $('b-o2').classList.toggle('on', s.o2On);
   $('b-grip').classList.toggle('on', game.grip);
 }

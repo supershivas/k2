@@ -1,16 +1,20 @@
-// Sprites 8×8 en pixel art. Palette : 4 verts Game Boy + 1 rose fluo (index 0 à 4),
-// -1 = transparent. Priorité de chargement : édition locale > sprites.json du dépôt > défauts.
+// Sprites en pixel art de taille libre (1 à 32 px par côté). Palette : 4 verts Game Boy + 1 rose fluo
+// (index 0 à 4), -1 = transparent. Un sprite = { w, h, px }.
+// Priorité de chargement : édition locale > sprites.json du dépôt > défauts.
 
 export const PALETTE = ['#0F380F', '#306230', '#8BAC0F', '#9BBC0F', '#FF3CAC'];
 
-export const SIZE = 8;
+export const MAX_SIZE = 32;
 export const REPO = 'supershivas/k2';
 
 export const SPRITE_DEFS = [
   { id: 'heroA', label: 'Héros 1' },
   { id: 'heroB', label: 'Héros 2' },
+  { id: 'heroP1', label: 'Dévers 1' },
+  { id: 'heroP2', label: 'Dévers 2' },
   { id: 'tent', label: 'Tente' },
   { id: 'flag', label: 'Drapeau' },
+  { id: 'grotte', label: 'Grotte' },
   { id: 'ration', label: 'Vivres' },
   { id: 'gaz', label: 'Gaz' },
   { id: 'o2', label: 'Oxygène' },
@@ -18,8 +22,35 @@ export const SPRITE_DEFS = [
 
 // Un caractère = un index de palette, « . » = transparent.
 const ART = {
-  heroA: ['...11..2', '...11.42', '..4444.1', '..4004..', '..4004..', '..4444..', '..11.1..', '..1...1.'],
-  heroB: ['2..11...', '24.11...', '1.4444..', '..4004..', '..4004..', '..4444..', '..1.11..', '.1...1..'],
+  heroA: [
+    '..33............', '..4....0000.....', '..4...011110....', '..44..013310....',
+    '...4..011110....', '...44.0044400...', '....444444444.4.', '...4441221444.4.',
+    '...44411114434.2', '....441111441.2.', '....444444444.1.', '....004444400.1.',
+    '.....444.444....', '.....44...44....', '.....11...111...', '....111...1111..',
+  ],
+  heroB: [
+    '............33..', '.....0000....4..', '....011110...4..', '....013310..44..',
+    '....011110..4...', '...0044400.44...', '.4.444444444....', '.4.4441221444...',
+    '2.4344411114....', '.2.144111144....', '.1.444444444....', '.1.004444400....',
+    '....444.444.....', '....44...44.....', '...111...11.....', '..1111...111....',
+  ],
+  // Vue de profil : suspendu sous un toit de roche, le visage tourné vers la droite.
+  heroP1: [
+    '....33......33..', '....44......44..', '.....44....44...', '.....44444.0110.',
+    '....1.4444.1331.', '...11.44444.00..', '...11.44444.....', '...1..4444......',
+    '.......444......', '.......444......', '......4.44......', '......4..44.....',
+    '.....44...44....', '.....1.....1....', '.....11....11...', '................',
+  ],
+  heroP2: [
+    '.....33....33...', '.....44....44...', '......44..44....', '......44444.0110',
+    '.....1.4444.1331', '....11.44444.00.', '....11.44444....', '....1..4444.....',
+    '........444.....', '........444.....', '.......44.4.....', '......44..4.....',
+    '.....44....4....', '....11.....1....', '...11......11...', '................',
+  ],
+};
+
+// Anciens dessins 8×8, doublés en 16×16 pour la résolution du jeu.
+const ART8 = {
   tent: ['........', '...44...', '..4444..', '.444444.', '44411444', '44411444', '44411444', '11111111'],
   flag: ['14444...', '14444...', '1.......', '1.......', '1.......', '1.......', '1.......', '11111111'],
   ration: ['........', '.444444.', '.400004.', '.422224.', '.422224.', '.400004.', '.444444.', '........'],
@@ -28,10 +59,39 @@ const ART = {
 };
 
 function parse(rows) {
-  return rows.flatMap(row => [...row].map(c => (c === '.' ? -1 : +c)));
+  return { w: rows[0].length, h: rows.length, px: rows.flatMap(row => [...row].map(c => (c === '.' ? -1 : +c))) };
 }
 
-export const DEFAULTS = Object.fromEntries(Object.entries(ART).map(([id, rows]) => [id, parse(rows)]));
+export function upscale(sp, k = 2) {
+  const w = sp.w * k, h = sp.h * k, px = new Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) px[y * w + x] = sp.px[Math.floor(y / k) * sp.w + Math.floor(x / k)];
+  return { w, h, px };
+}
+
+// Bouche de grotte (32×24) : arche sombre, liseré clair puis contour sombre pour rester lisible sur toute roche.
+function makeCave() {
+  const w = 32, h = 24, px = new Array(w * h).fill(-1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nx = (x - 15.5) / 16, ny = (y - 23) / 23.5;
+      const d = nx * nx + ny * ny;
+      let c = -1;
+      if (d <= 0.4) c = y >= 20 ? 1 : 0;
+      else if (d <= 0.52) c = 1;
+      else if (d <= 0.82) c = y < 9 || (x + y) % 2 === 0 ? 3 : 2;
+      else if (d <= 1) c = 0;
+      px[y * w + x] = c;
+    }
+  }
+  for (const [x, y] of [[15, 19], [16, 19], [15, 18]]) px[y * w + x] = 4; // réchaud allumé
+  return { w, h, px };
+}
+
+export const DEFAULTS = {
+  ...Object.fromEntries(Object.entries(ART).map(([id, rows]) => [id, parse(rows)])),
+  ...Object.fromEntries(Object.entries(ART8).map(([id, rows]) => [id, upscale(parse(rows))])),
+  grotte: makeCave(),
+};
 
 const KEYS = { local: 'k2:sprites', token: 'k2:github-token' };
 
@@ -51,15 +111,29 @@ function storageSet(key, value) {
   } catch { /* stockage indisponible : l'édition reste en mémoire */ }
 }
 
-function isValidSprite(data) {
-  return Array.isArray(data) && data.length === SIZE * SIZE
-    && data.every(v => Number.isInteger(v) && v >= -1 && v < PALETTE.length);
+function isValidSprite(sp) {
+  return !!sp && Number.isInteger(sp.w) && Number.isInteger(sp.h)
+    && sp.w >= 1 && sp.h >= 1 && sp.w <= MAX_SIZE && sp.h <= MAX_SIZE
+    && Array.isArray(sp.px) && sp.px.length === sp.w * sp.h
+    && sp.px.every(v => Number.isInteger(v) && v >= -1 && v < PALETTE.length);
+}
+
+// Accepte l'ancien format (tableau de 64 valeurs, 8×8) en le doublant en 16×16.
+function normalize(raw) {
+  if (Array.isArray(raw) && raw.length === 64) {
+    const sp = upscale({ w: 8, h: 8, px: raw });
+    return isValidSprite(sp) ? sp : null;
+  }
+  return isValidSprite(raw) ? { w: raw.w, h: raw.h, px: raw.px.slice() } : null;
 }
 
 function sanitize(obj) {
   const out = {};
   if (!obj || typeof obj !== 'object') return out;
-  for (const { id } of SPRITE_DEFS) if (isValidSprite(obj[id])) out[id] = obj[id].slice();
+  for (const { id } of SPRITE_DEFS) {
+    const sp = normalize(obj[id]);
+    if (sp) out[id] = sp;
+  }
   return out;
 }
 
@@ -70,17 +144,17 @@ export function getSprite(id) { return sprites[id]; }
 export function getUserEdits() { return clone(userEdits); }
 export function getAllSprites() { return clone(sprites); }
 
-export function setSprite(id, data) {
-  if (!isValidSprite(data)) return;
-  sprites[id] = data.slice();
-  userEdits[id] = data.slice();
+export function setSprite(id, sp) {
+  if (!isValidSprite(sp)) return;
+  sprites[id] = { w: sp.w, h: sp.h, px: sp.px.slice() };
+  userEdits[id] = clone(sprites[id]);
   delete cache[id];
   storageSet(KEYS.local, JSON.stringify(userEdits));
   notify();
 }
 
 export function resetSprite(id) {
-  sprites[id] = DEFAULTS[id].slice();
+  sprites[id] = clone(DEFAULTS[id]);
   delete userEdits[id];
   delete cache[id];
   storageSet(KEYS.local, Object.keys(userEdits).length ? JSON.stringify(userEdits) : null);
@@ -95,22 +169,23 @@ export function resetAllSprites() {
   notify();
 }
 
-// Canvas 16×16 prêt à être dessiné (mis en cache).
+// Canvas aux dimensions du sprite, prêt à être dessiné (mis en cache).
 export function spriteCanvas(id) {
   if (cache[id]) return cache[id];
+  const sp = sprites[id];
   const c = document.createElement('canvas');
-  c.width = c.height = SIZE;
-  paintSprite(c.getContext('2d'), sprites[id]);
+  c.width = sp.w; c.height = sp.h;
+  paintSprite(c.getContext('2d'), sp);
   cache[id] = c;
   return c;
 }
 
-export function paintSprite(ctx, data) {
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  data.forEach((v, i) => {
+export function paintSprite(ctx, sp) {
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  sp.px.forEach((v, i) => {
     if (v < 0) return;
     ctx.fillStyle = PALETTE[v];
-    ctx.fillRect(i % SIZE, Math.floor(i / SIZE), 1, 1);
+    ctx.fillRect(i % sp.w, Math.floor(i / sp.w), 1, 1);
   });
 }
 
@@ -148,7 +223,7 @@ export async function publishSprites(token) {
   else if (current.status !== 404) throw new Error(current.status === 401 ? 'Jeton refusé' : `GitHub ${current.status}`);
   const body = {
     message: 'Met à jour les sprites',
-    content: btoa(JSON.stringify(getAllSprites(), null, 2)),
+    content: btoa(JSON.stringify(getAllSprites())),
     branch: 'main',
     ...(sha ? { sha } : {}),
   };
