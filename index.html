@@ -56,11 +56,11 @@
 
   <footer class="controls safe-bottom" id="controls">
     <div class="actions">
-      <button class="act" id="b-grip" type="button"><i class="ti ti-hand-grab"></i><span>Prise</span></button>
+      <button class="act" id="b-piton" type="button"><i class="ti ti-anchor"></i><span id="b-piton-label">Piton</span></button>
       <button class="act" id="b-eat" type="button"><i class="ti ti-meat"></i><span>Manger</span></button>
       <button class="act" id="b-o2" type="button"><i class="ti ti-bottle"></i><span>O₂</span></button>
       <button class="act" id="b-camp" type="button"><i class="ti ti-tent"></i><span id="b-camp-label">Camper</span></button>
-      <button class="act" id="b-radio" type="button"><i class="ti ti-cloud-storm"></i><span>Météo</span></button>
+      <button class="act" id="b-bag" type="button"><i class="ti ti-backpack"></i><span>Sac</span></button>
     </div>
     <div class="steps">
       <button class="step" id="b-left" type="button"><i class="ti ti-chevron-left"></i><span>Gauche</span></button>
@@ -127,12 +127,30 @@
     </div>
   </dialog>
 
-  <dialog id="radio" class="modal modal-narrow radio">
-    <div class="modal-head"><h2>Radio météo</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
-    <div class="gb-body">
-      <div class="gb-screen"><canvas id="radio-screen" width="160" height="144" aria-label="Prévisions du lendemain"></canvas></div>
-      <div class="gb-label">Prévisions du lendemain à ton altitude</div>
+  <dialog id="bag" class="modal modal-narrow radio">
+    <div class="modal-head"><h2>Sac</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
+    <div class="tabs tabs-3" id="bag-tabs" role="tablist">
+      <button class="tab" type="button" role="tab" data-tab="inv">Inventaire</button>
+      <button class="tab" type="button" role="tab" data-tab="meteo">Météo</button>
+      <button class="tab" type="button" role="tab" data-tab="map">Carte</button>
     </div>
+    <section class="bag-panel" id="bag-inv"><ul class="inv" id="inv-list"></ul></section>
+    <section class="bag-panel" id="bag-meteo" hidden>
+      <div class="tabs tabs-2" id="day-tabs">
+        <button class="tab" type="button" data-day="0">Aujourd’hui</button>
+        <button class="tab" type="button" data-day="1">Demain</button>
+      </div>
+      <div class="gb-body">
+        <div class="gb-screen"><canvas id="radio-screen" width="160" height="144" aria-label="Prévisions météo"></canvas></div>
+        <div class="gb-label" id="meteo-label">Météo à ton altitude</div>
+      </div>
+    </section>
+    <section class="bag-panel" id="bag-map" hidden>
+      <div class="gb-body">
+        <div class="gb-screen"><canvas id="map-screen" width="160" height="200" aria-label="Carte de la montagne"></canvas></div>
+        <div class="gb-label">Carte du K2 : tu es le point rose</div>
+      </div>
+    </section>
   </dialog>
 
   <dialog id="confirm" class="modal modal-narrow">

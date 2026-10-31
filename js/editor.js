@@ -181,7 +181,7 @@ function refreshUi() {
 }
 
 function render() {
-  const sibling = { heroA: 'heroB', heroB: 'heroA', heroP1: 'heroP2', heroP2: 'heroP1' }[current];
+  const sibling = { heroA: 'heroB', heroB: 'heroA', heroP1: 'heroP2', heroP2: 'heroP1', heroW1: 'heroW2', heroW2: 'heroW1' }[current];
   for (const [id, data] of [['ed-prev1', sp], ['ed-prev2', sibling ? getSprite(sibling) : sp]]) {
     const c = $(id);
     if (c.width !== data.w || c.height !== data.h) { c.width = data.w; c.height = data.h; }

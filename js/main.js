@@ -1,6 +1,6 @@
 import { Game, SUMMIT, newState } from './game.js';
-import { PALETTE as P, loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
-import { drawText } from './pixfont.js';
+import { loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
+import { initBag, openBag } from './bag.js';
 import { initEditor, openEditor } from './editor.js';
 import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from '../app-update.js';
 
@@ -131,7 +131,7 @@ function renderHome() {
 function showHome() {
   closeAllDialogs();
   game.playing = false;
-  game.grip = false;
+  game.hold.L = game.hold.R = false;
   $('event').classList.remove('show');
   $('home').hidden = false;
   document.body.classList.add('paused');
@@ -172,44 +172,8 @@ function updateHud() {
   $('chip-snow').hidden = snow < 0.15;
   $('b-camp-label').textContent = game.nearCave() ? 'Grotte' : 'Camper';
   $('b-o2').classList.toggle('on', s.o2On);
-  $('b-grip').classList.toggle('on', game.grip);
-}
-
-// ── Radio météo (écran Game Boy) ─────────────────────────────────────────
-function openRadio() {
-  if (!game.playing || game.busy) return;
-  game.setGrip(false);
-  $('radio').showModal();
-  drawRadio(game.forecast());
-}
-
-function drawRadio(fc) {
-  const g = $('radio-screen').getContext('2d');
-  g.fillStyle = P[3]; g.fillRect(0, 0, 160, 144);
-  drawText(g, 'METEO', 6, 6, P[0], 2);
-  drawText(g, `JOUR ${fc.day}`, 100, 8, P[1]);
-  drawText(g, `A ${fc.alt} M`, 100, 15, P[1]);
-  g.fillStyle = P[0]; g.fillRect(6, 24, 148, 1);
-  const x0 = 12, colW = 17, base = 88, maxH = 48;
-  fc.slots.forEach((sl, i) => {
-    const x = x0 + i * colW;
-    if (sl.dark) { g.fillStyle = P[2]; g.fillRect(x - 1, 30, colW - 1, base - 30); }
-    const wh = Math.round(sl.wind * maxH), sh = Math.round(sl.snow * maxH);
-    g.fillStyle = sl.wind > 0.6 ? P[4] : P[0]; g.fillRect(x + 1, base - wh, 6, wh);
-    g.fillStyle = P[1]; g.fillRect(x + 8, base - sh, 6, sh);
-    drawText(g, String(sl.h).padStart(2, '0'), x + 3, base + 4, P[0]);
-  });
-  g.fillStyle = P[0]; g.fillRect(6, base, 148, 1);
-  g.fillRect(8, 105, 5, 5); g.fillStyle = P[1]; g.fillRect(50, 105, 5, 5);
-  drawText(g, 'VENT', 16, 105, P[0]); drawText(g, 'NEIGE', 58, 105, P[0]);
-  g.fillStyle = P[2]; g.fillRect(100, 105, 5, 5);
-  drawText(g, 'NUIT', 108, 105, P[0]);
-  const temps = fc.slots.map(sl => sl.T);
-  drawText(g, `MIN ${Math.round(Math.min(...temps))}  MAX ${Math.round(Math.max(...temps))}`, 8, 116, P[0]);
-  const w = Math.max(...fc.slots.map(sl => sl.wind)), n = Math.max(...fc.slots.map(sl => sl.snow));
-  const verdict = w > 0.7 ? 'TEMPETE: RESTE AU CAMP' : w > 0.45 ? 'RAFALES: GARDE LA PRISE' : n > 0.5 ? 'NEIGE: PROGRESSION LENTE' : 'CALME: BON JOUR POUR GRIMPER';
-  g.fillStyle = P[0]; g.fillRect(4, 128, 152, 12);
-  drawText(g, verdict, 8, 132, P[3]);
+  $('b-piton').classList.toggle('on', game.anchored);
+  $('b-piton-label').textContent = `Piton ${s.pitonStock}`;
 }
 
 // ── Boucle ───────────────────────────────────────────────────────────────
@@ -229,30 +193,36 @@ function press(el, fn) {
   el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
-press($('b-left'), () => game.step('L'));
-press($('b-right'), () => game.step('R'));
+// Gauche / Droite : un pas à chaque appui ; maintenus, ils font marcher sur les pentes douces.
+function holdButton(el, side) {
+  el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); game.hold[side] = true; game.step(side); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => el.addEventListener(t, () => { game.hold[side] = false; }));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+holdButton($('b-left'), 'L');
+holdButton($('b-right'), 'R');
+press($('b-piton'), () => game.plantPiton());
 press($('b-eat'), () => game.eat());
 press($('b-o2'), () => game.toggleOxygen());
 press($('b-camp'), () => game.camp());
-$('b-radio').addEventListener('click', openRadio);
-const gripBtn = $('b-grip');
-gripBtn.addEventListener('pointerdown', e => { e.preventDefault(); gripBtn.setPointerCapture(e.pointerId); game.setGrip(true); });
-['pointerup', 'pointercancel'].forEach(t => gripBtn.addEventListener(t, () => game.setGrip(false)));
-gripBtn.addEventListener('contextmenu', e => e.preventDefault());
+$('b-bag').addEventListener('click', () => openBag());
 
 const keys = { ArrowLeft: 'L', q: 'L', a: 'L', ArrowRight: 'R', d: 'R' };
 window.addEventListener('keydown', e => {
   if (e.target.closest?.('input, textarea') || document.querySelector('dialog[open]')) return;
   if (e.repeat && keys[e.key]) return;
-  if (keys[e.key]) { game.step(keys[e.key]); e.preventDefault(); }
-  else if (e.key === ' ' || e.key === 'ArrowDown') { game.setGrip(true); e.preventDefault(); }
+  if (keys[e.key]) { game.hold[keys[e.key]] = true; game.step(keys[e.key]); e.preventDefault(); }
+  else if (e.key === ' ' || e.key === 'ArrowDown' || e.key === 'p') { game.plantPiton(); e.preventDefault(); }
   else if (e.key === 'e') game.eat();
   else if (e.key === 'o') game.toggleOxygen();
   else if (e.key === 'c') game.camp();
-  else if (e.key === 'm') openRadio();
+  else if (e.key === 'i') openBag('inv');
+  else if (e.key === 'm') openBag('meteo');
+  else if (e.key === 'k') openBag('map');
 });
-window.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'ArrowDown') game.setGrip(false); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { updateRecords(); save(); saveRecords(); game.setGrip(false); } });
+window.addEventListener('keyup', e => { if (keys[e.key]) game.hold[keys[e.key]] = false; });
+window.addEventListener('blur', () => { game.hold.L = game.hold.R = false; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { updateRecords(); save(); saveRecords(); game.hold.L = game.hold.R = false; } });
 window.addEventListener('pagehide', () => { updateRecords(); save(); saveRecords(); });
 
 // ── Navigation et écrans ─────────────────────────────────────────────────
@@ -330,6 +300,7 @@ $('s-file').addEventListener('change', async e => {
 
 // ── Démarrage ────────────────────────────────────────────────────────────
 initEditor({ confirm: confirmDialog });
+initBag(game);
 applyTokens();
 game.load(read(KEYS.save, newState()));
 loadSprites();

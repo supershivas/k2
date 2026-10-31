@@ -14,7 +14,7 @@ const HERO_Y = 116 * K; // pieds du héros à l'écran
 const TILE_H = 256 * K;
 const OXYGEN_ALT = 6500;
 const BOTTLE_SECONDS = 90;
-const MAX = { food: 12, gas: 8, o2: 4 };
+const MAX = { food: 12, gas: 8, o2: 4, piton: 12, rope: 500 };
 const ITEM_STEP = 110;
 const BLOCK_STEP = 36;
 const CAVE_STEP = 650;
@@ -51,6 +51,11 @@ export function newState() {
     min: 360, // minutes depuis le début, démarre à 6 h
     camps: [], items: [], falls: 0, steps: 0, summit: false,
     ov: null, ovDone: [], // dévers en cours { id, p } et dévers franchis
+    walk: null, walkDone: [], // pente à marcher en cours { id, p } et pentes franchies
+    seed: Math.floor(Math.random() * 1e9), // tirage des pentes de cette ascension
+    pitonStock: 5, pitons: [], // pitons dans le sac et pitons plantés { a, x, len, linked, ov?, p? }
+    rope: 300, live: 0, // corde totale (m) et longueur déroulée entre le dernier piton et le héros
+    top: 0, // plus haute altitude atteinte (carte du sac)
   };
 }
 
@@ -67,6 +72,57 @@ function bayerPattern(g, colorIdx, level) {
     patterns[key] = g.createPattern(c, 'repeat');
   }
   return patterns[key];
+}
+
+// Corde : points reliés par des contraintes de distance (intégration de Verlet), pesanteur, vent, amortissement.
+// Une corde ne pousse pas : elle ne résiste qu'à l'étirement, donc elle pend et ondule quand elle est lâche.
+const SEG = 2.5;
+class Rope {
+  constructor(a, b, len) {
+    this.len = len;
+    this.pts = [];
+    const n = Math.max(2, Math.ceil(len / SEG) + 1);
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const sag = Math.sqrt(Math.max(0, len * len - d * d)) * 0.4;
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const x = lerp(a.x, b.x, t), y = lerp(a.y, b.y, t) - Math.sin(Math.PI * t) * sag;
+      this.pts.push({ x, y, px: x, py: y });
+    }
+  }
+  setLength(len) {
+    this.len = len;
+    const last = this.pts[this.pts.length - 1];
+    while ((this.pts.length - 1) * SEG < len - SEG) this.pts.push({ x: last.x, y: last.y, px: last.x, py: last.y });
+  }
+  step(dt, a, b, pinB, windAx, t) {
+    const pts = this.pts, n = pts.length;
+    for (let i = 1; i < n; i++) {
+      if (i === n - 1 && pinB) continue;
+      const p = pts[i];
+      const vx = (p.x - p.px) * 0.993, vy = (p.y - p.py) * 0.993;
+      p.px = p.x; p.py = p.y;
+      p.x += vx + windAx * (0.6 + 0.4 * Math.sin(t * 1.7 + p.y * 0.3)) * dt * dt;
+      p.y += vy - 9.8 * dt * dt;
+    }
+    const L = this.len / (n - 1);
+    for (let it = 0; it < 12; it++) {
+      pts[0].x = a.x; pts[0].y = a.y;
+      if (pinB) { pts[n - 1].x = b.x; pts[n - 1].y = b.y; }
+      for (let i = 0; i < n - 1; i++) {
+        const p = pts[i], q = pts[i + 1];
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+        if (d <= L || d === 0) continue;
+        const wp = i === 0 ? 0 : 1, wq = i + 1 === n - 1 && pinB ? 0 : 1;
+        if (wp + wq === 0) continue;
+        const k = (d - L) / d / (wp + wq);
+        p.x += dx * k * wp; p.y += dy * k * wp;
+        q.x -= dx * k * wq; q.y -= dy * k * wq;
+      }
+    }
+    pts[0].x = a.x; pts[0].y = a.y; pts[0].px = a.x; pts[0].py = a.y;
+    if (pinB) { pts[n - 1].x = b.x; pts[n - 1].y = b.y; }
+  }
 }
 
 // Textures de la paroi : roche sombre, roche claire, glace. Tramées et ombrées côté gauche (lumière à droite).
@@ -198,7 +254,6 @@ export class Game {
     this.view = 0;
     this.hx = 50;
     this.frame = 0;
-    this.grip = false;
     this.lastSide = null;
     this.lastStep = -9;
     this.clock = 0;
@@ -210,6 +265,13 @@ export class Game {
     this.drawnMode = 'face';
     this.lastMode = 'face';
     this.evt = { next: 40, last: -1 };
+    this.hold = { L: false, R: false }; // boutons maintenus (marche)
+    this.walks = [];
+    this.ropes = []; // cordes fixes entre pitons
+    this.liveRope = null; // corde entre le dernier piton et le héros
+    this.roped = false;
+    this.ropeAcc = 0;
+    this.walkAnim = 0;
     this.gust = { next: 12, warn: 0, dir: 1 };
     this.rock = { next: 14, warn: 0, fall: 0, x: 50, hit: false };
     this.floats = [];
@@ -229,14 +291,21 @@ export class Game {
     s.camps = (s.camps || []).map(c => (typeof c === 'number' ? { a: c, x: 50 } : c));
     s.items = Array.isArray(s.items) ? s.items : [];
     s.ovDone = Array.isArray(s.ovDone) ? s.ovDone : [];
+    s.walkDone = Array.isArray(s.walkDone) ? s.walkDone : [];
+    s.pitons = Array.isArray(s.pitons) ? s.pitons : [];
     if (s.ov && !OVERHANGS[s.ov.id]) s.ov = null;
     this.s = s;
+    this.walks = this.makeWalks(s.seed);
+    if (s.walk && !this.walks[s.walk.id]) s.walk = null;
+    if (s.walk && s.ov) s.walk = null;
+    this.syncRopes();
     this.view = s.alt;
     this.hx = s.x;
     this.fall = this.sleep = this.tr = null;
-    this.grip = false;
+    this.hold.L = this.hold.R = false;
     this.lastSide = null;
     this.floats = [];
+    this.backdrops = {};
     this.lastMode = this.drawnMode = this.mode;
     this.hooks.stateChanged?.();
   }
@@ -265,7 +334,7 @@ export class Game {
   get needsOxygen() { return this.s.alt > OXYGEN_ALT; }
   get oxygenActive() { return this.s.o2On && this.s.o2Sec > 0; }
   get busy() { return !!(this.fall || this.sleep || this.s.summit); }
-  get mode() { return this.s.ov ? 'profile' : 'face'; }
+  get mode() { return this.s.ov ? 'profile' : this.s.walk ? 'walk' : 'face'; }
 
   // Prévision du lendemain à l'altitude actuelle, par tranches de 3 h.
   forecast() {
@@ -279,6 +348,18 @@ export class Game {
     return { day: d0 + 2, alt: Math.round(alt), slots };
   }
 
+  // Prévision heure par heure d'une journée (0 = aujourd'hui, 1 = demain) à l'altitude actuelle.
+  dayForecast(offset) {
+    const d0 = Math.floor(this.s.min / 1440) + offset;
+    const alt = this.s.alt;
+    const slots = [];
+    for (let h = 0; h < 24; h++) {
+      const m = d0 * 1440 + h * 60 + 30;
+      slots.push({ h, ...this.weatherAt(m, alt), T: this.tempAt(m, alt), dark: this.daylightAt(m) < 0.5 });
+    }
+    return { day: d0 + 1, alt: Math.round(alt), slots };
+  }
+
   // ── Géométrie de la face ───────────────────────────────────────────────
   faceHalf(a) { return 8 + 72 * Math.pow(1 - clamp(a / SUMMIT, 0, 1), 0.75); }
   edgeL(a) { a = Math.max(0, a); return Math.round(50 - this.faceHalf(a) + 3 * (vnoise(a / 30, 3) - 0.5) * 2 + 1.5 * (vnoise(a / 7, 5) - 0.5) * 2); }
@@ -289,11 +370,26 @@ export class Game {
   clampX(x, a) { return clamp(x, this.leftBound(a) + 6, this.rightBound(a) - 6); }
   ys(a) { return HERO_Y + (this.view - a) * K; }
 
+  // Pentes à marcher, vues de profil : tirées au hasard à chaque ascension (graine s.seed).
+  makeWalks(seed) {
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      let a = 600 + i * 1150 + hash(seed + i * 7) * 500;
+      if (OVERHANGS.some(o => Math.abs(o.a - a) < 90)) a += 130;
+      if (a > SUMMIT - 300) break;
+      const slope = 0.12 + 0.33 * hash(seed + i * 13 + 1);
+      const len = 50 + 60 * hash(seed + i * 17 + 2);
+      out.push({ id: out.length, a: Math.round(a), dir: hash(seed + i * 19 + 3) < 0.5 ? -1 : 1, slope, len, gain: Math.round(len * slope) });
+    }
+    return out;
+  }
+  nearHazard(a, r) { return OVERHANGS.some(o => Math.abs(o.a - a) < r) || this.walks.some(w => Math.abs(w.a - a) < r); }
+
   // Blocs de roche et plaques de verglas, générés par tranche de 36 m.
   obstacle(i) {
     if (i < 1 || i * BLOCK_STEP > SUMMIT - 60 || hash(i * 17 + 3) > 0.3 + 0.35 * (i * BLOCK_STEP / SUMMIT)) return null;
     const a = i * BLOCK_STEP + 8 + hash(i * 17 + 5) * 20;
-    if (OVERHANGS.some(o => Math.abs(o.a - a) < 24)) return null; // rien au pied ni au-dessus d'un dévers
+    if (this.nearHazard(a, 24)) return null; // rien au pied ni au-dessus d'un dévers ou d'une pente
     const L = this.leftBound(a) + 9, R = this.rightBound(a) - 9;
     const type = hash(i * 17 + 9) < 0.55 ? 'block' : 'ice';
     return { a, x: L + hash(i * 17 + 7) * Math.max(1, R - L), type, w: type === 'block' ? 10 : 16 };
@@ -319,8 +415,9 @@ export class Game {
     const a = i * ITEM_STEP + 30 + hash(i * 29 + 3) * 60;
     const L = this.leftBound(a) + 9, R = this.rightBound(a) - 9;
     const r = hash(i * 29 + 5);
-    let type = r < 0.5 ? 'ration' : r < 0.75 ? 'gaz' : 'o2';
+    let type = r < 0.32 ? 'ration' : r < 0.5 ? 'gaz' : r < 0.68 ? 'piton' : r < 0.8 ? 'corde' : 'o2';
     if (type === 'o2' && a < 2000) type = 'ration';
+    if (this.nearHazard(a, 12)) return null;
     return { id: i, a, x: L + hash(i * 29 + 7) * Math.max(1, R - L), type };
   }
 
@@ -329,7 +426,7 @@ export class Game {
     if (i < 1 || hash(i * 41 + 2) > 0.88) return null;
     let a = i * CAVE_STEP + 120 + hash(i * 41 + 4) * 400;
     if (a > SUMMIT - 200) return null;
-    if (OVERHANGS.some(o => Math.abs(o.a - a) < 40)) a += 60;
+    if (this.nearHazard(a, 40)) a += 70;
     const L = this.leftBound(a) + 16, R = this.rightBound(a) - 16;
     return { id: i, a, x: L + hash(i * 41 + 6) * Math.max(1, R - L) };
   }
@@ -343,8 +440,26 @@ export class Game {
   }
   nearCave() {
     const s = this.s;
-    if (s.ov) return null;
+    if (s.ov || s.walk) return null;
     return this.cavesIn(s.alt - 10, s.alt + 10).find(c => Math.abs(c.x - s.x) < 14) || null;
+  }
+
+  // Ancré : un piton planté tout près (en dévers : sous la même prise). Remplace l'ancienne « prise ».
+  get anchored() {
+    const s = this.s;
+    if (s.walk) return false;
+    if (s.ov) return s.pitons.some(p => p.ov === s.ov.id && Math.abs(p.p - s.ov.p) <= 1.5);
+    return s.pitons.some(p => p.ov === undefined && Math.abs(p.a - s.alt) < 5 && Math.abs(p.x - s.x) < 9);
+  }
+  topPiton() {
+    const chain = this.s.pitons.filter(p => p.linked);
+    return chain.length ? chain[chain.length - 1] : null;
+  }
+  deployed() { return this.s.pitons.reduce((n, p) => n + (p.linked ? p.len : 0), 0); }
+
+  // Prochaine pente à marcher non franchie que ce pas fait atteindre.
+  walkBetween(a0, a1) {
+    return this.walks.find(w => !this.s.walkDone.includes(w.id) && w.a >= a0 - 0.001 && w.a <= a1) || null;
   }
 
   // Prochain dévers non franchi que ce pas fait atteindre.
@@ -355,7 +470,8 @@ export class Game {
   // ── Actions du joueur ──────────────────────────────────────────────────
   step(side) {
     const s = this.s;
-    if (!this.playing || this.busy || this.grip) return;
+    if (!this.playing || this.busy) return;
+    if (s.walk) return; // la marche se joue en maintenant un bouton (voir update)
     if (s.energy < 1) { this.say('Épuisé : reprends ton souffle', 'warn'); return; }
     this.frame ^= 1;
     this.lastStep = this.clock;
@@ -379,7 +495,9 @@ export class Game {
       this.say('Bloc ! Traverse : même bouton deux fois', 'warn');
     }
     const roof = this.overhangBetween(s.alt, next);
+    const slope = roof ? null : this.walkBetween(s.alt, next);
     if (roof) next = roof.a;
+    if (slope) next = slope.a;
     s.alt = next;
     s.energy = Math.max(0, s.energy - 0.7 * (1 + s.alt / 7000) * (hypoxia ? 2.4 : 1) * (1 + 0.4 * wind) * (ice ? 1.8 : 1));
     s.min += 1.8;
@@ -389,6 +507,12 @@ export class Game {
       s.ov = { id: roof.id, p: 0 };
       this.lastSide = null;
       this.say('Dévers ! Alterne les mains pour traverser', 'warn');
+      return;
+    }
+    if (slope) {
+      s.walk = { id: slope.id, p: 0 };
+      this.lastSide = null;
+      this.say(`Pente douce : maintiens ${slope.dir > 0 ? 'Droite' : 'Gauche'} pour marcher`, 'warn');
       return;
     }
     if (s.alt >= SUMMIT && !s.summit) {
@@ -422,7 +546,68 @@ export class Game {
     }
   }
 
-  setGrip(on) { this.grip = on && this.playing && !this.busy; }
+  // Plante un piton à l'endroit où l'on est : il ancre le héros et relie la corde.
+  plantPiton() {
+    const s = this.s;
+    if (!this.playing || this.busy) return;
+    if (s.walk) { this.say('Inutile de pitonner : tu marches', 'info'); return; }
+    if (s.pitonStock < 1) { this.say('Plus de pitons', 'warn'); return; }
+    if (this.anchored) { this.say('Tu es déjà ancré ici', 'info'); return; }
+    const top = this.topPiton();
+    const roof = s.ov ? OVERHANGS[s.ov.id] : null;
+    const a = roof ? roof.a : Math.round(s.alt * 10) / 10;
+    // Un piton au-dessus du dernier : il prolonge la corde si elle est tendue jusqu'à lui, sinon il ouvre une nouvelle ligne.
+    const linked = !top || a >= top.a - 0.5;
+    const piton = { a, x: Math.round(s.x), len: top && this.roped && linked ? Math.round(s.live * 10) / 10 : 0, linked };
+    if (roof) { piton.ov = roof.id; piton.p = s.ov.p; }
+    s.pitons.push(piton);
+    s.pitonStock--;
+    if (linked) s.live = 0;
+    s.energy = Math.max(0, s.energy - 2.5);
+    this.syncRopes();
+    this.say(piton.len > 0 || !top ? 'Piton planté, corde amarrée' : linked ? 'Piton planté : nouvelle ligne de corde' : 'Piton planté (sans corde)', 'good');
+  }
+
+  // ── Cordes ─────────────────────────────────────────────────────────────
+  syncRopes() {
+    const chain = this.s.pitons.filter(p => p.linked);
+    this.ropes = [];
+    for (let i = 1; i < chain.length; i++) {
+      const a = chain[i - 1], b = chain[i];
+      if (b.len > 0.5 && a.ov === undefined && b.ov === undefined) {
+        this.ropes.push({ a, b, rope: new Rope({ x: a.x, y: a.a }, { x: b.x, y: b.a }, b.len) });
+      }
+    }
+    const top = chain[chain.length - 1];
+    this.liveRope = top ? new Rope({ x: top.x, y: top.a }, { x: this.s.x, y: this.s.alt + 3 }, Math.max(1, this.s.live)) : null;
+  }
+
+  updateRopes(dt) {
+    const s = this.s;
+    const top = this.topPiton();
+    if (!top) { this.roped = false; this.liveRope = null; return; }
+    const d = Math.hypot(top.x - s.x, top.a - s.alt);
+    const cap = Math.max(0, s.rope - this.deployed());
+    const need = d * 1.06 + 1.5; // un peu de mou : la corde pend et ondule
+    this.roped = need <= cap;
+    if (this.roped) s.live = Math.max(s.live, need);
+    if (!this.liveRope) this.syncRopes();
+    if (!this.liveRope) return;
+    const roofMode = !!s.ov;
+    this.liveRope.setLength(Math.max(1, this.roped ? s.live : cap));
+    const gust = this.gust.warn > 0 ? 8 : 0;
+    const windAx = -(this.weather.wind * 5 + gust);
+    this.ropeAcc = Math.min(this.ropeAcc + dt, 0.1);
+    const hero = { x: this.hx, y: this.view + 3 };
+    while (this.ropeAcc >= 1 / 60) {
+      this.ropeAcc -= 1 / 60;
+      for (const r of this.ropes) {
+        if (r.a.a > this.view + 130 || r.b.a < this.view - 130) continue;
+        r.rope.step(1 / 60, { x: r.a.x, y: r.a.a }, { x: r.b.x, y: r.b.a }, true, windAx, this.clock);
+      }
+      if (!roofMode) this.liveRope.step(1 / 60, { x: top.x, y: top.a }, hero, this.roped, windAx, this.clock);
+    }
+  }
 
   eat() {
     const s = this.s;
@@ -457,7 +642,6 @@ export class Game {
       s.camps.push({ a: Math.round(s.alt), x: Math.round(s.x) });
     }
     s.o2On = false;
-    this.grip = false;
     const hour = (s.min % 1440) / 60;
     const night = this.daylight < 0.5;
     const toMorning = ((6 - hour + 24) % 24) * 60 || 1440;
@@ -515,6 +699,10 @@ export class Game {
     if (this.sleep) { this.updateSleep(dt); return; }
     if (s.summit) return;
 
+    s.top = Math.max(s.top || 0, s.alt);
+    this.updateRopes(dt);
+    if (s.walk) this.updateWalk(dt);
+
     s.min += dt * 0.6;
     const { wind } = this.weather;
     const T = this.temperature;
@@ -532,24 +720,54 @@ export class Game {
 
     if (this.clock - this.lastStep > 0.8 && s.warmth > 15) {
       const hypoxia = this.needsOxygen && !this.oxygenActive;
-      const rate = (this.grip ? 6 : 4) * (1 - s.alt / 14000) * (hypoxia ? 0.3 : 1) * (s.food < 1 ? 0.5 : 1);
-      if (s.ov) {
-        // Suspendu : se reposer sur une prise (Prise) récupère un peu, rester pendu aux bras épuise.
-        s.energy = this.grip ? Math.min(100, s.energy + rate * 0.5 * dt) : Math.max(0, s.energy - (0.9 + wind) * dt);
+      const anchored = this.anchored;
+      const rate = (anchored ? 6 : 4) * (1 - s.alt / 14000) * (hypoxia ? 0.3 : 1) * (s.food < 1 ? 0.5 : 1);
+      if (s.walk) {
+        s.energy = Math.min(100, s.energy + rate * dt); // à l'arrêt sur la pente
+      } else if (s.ov) {
+        // Suspendu : se reposer sur un piton récupère un peu, rester pendu aux bras épuise.
+        s.energy = anchored ? Math.min(100, s.energy + rate * 0.5 * dt) : Math.max(0, s.energy - (0.9 + wind) * dt);
         if (s.energy <= 0) this.startFall('Épuisement');
       } else s.energy = Math.min(100, s.energy + rate * dt);
     }
 
     this.pickupItems();
     this.updateGusts(dt, wind);
+    if (s.walk) { this.rock.warn = 0; this.rock.fall = 0; }
     this.updateRock(dt);
     this.updateEvents(dt);
     if (s.warmth <= 0) this.startFall('Hypothermie');
   }
 
+  // Marche sur une pente douce : maintenir le bouton du sens de la pente fait avancer ; le sens opposé fait reculer.
+  updateWalk(dt) {
+    const s = this.s, wk = s.walk, sec = this.walks[wk.id];
+    const { wind } = this.weather;
+    const forward = sec.dir > 0 ? this.hold.R : this.hold.L;
+    const back = sec.dir > 0 ? this.hold.L : this.hold.R;
+    const hypoxia = this.needsOxygen && !this.oxygenActive;
+    this.walkMoving = false;
+    if ((forward || back) && s.energy >= 1) {
+      const v = 3 * (1 - 0.3 * wind) * (hypoxia ? 0.55 : 1) * (this.daylight < 0.4 ? 0.85 : 1);
+      wk.p = clamp(wk.p + (forward ? 1 : -0.6) * v * dt / sec.len, 0, 1);
+      s.energy = Math.max(0, s.energy - (0.5 + sec.slope * 2.5) * (forward ? 1 : 0.4) * (hypoxia ? 2.2 : 1) * (1 + 0.4 * wind) * dt);
+      this.lastStep = this.clock;
+      this.walkAnim += dt;
+      this.walkMoving = true;
+    } else if ((forward || back) && s.energy < 1) this.say('Épuisé : lâche le bouton et souffle', 'warn');
+    s.alt = sec.a + wk.p * sec.gain;
+    s.x = 50;
+    if (wk.p >= 1) {
+      s.walkDone.push(sec.id);
+      s.walk = null;
+      s.alt = sec.a + sec.gain;
+      this.say('Pente franchie : la paroi reprend', 'good');
+    }
+  }
+
   updateEvents(dt) {
     const e = this.evt;
-    if (this.s.ov || this.fall || this.sleep) return;
+    if (this.s.ov || this.s.walk || this.fall || this.sleep) return;
     e.next -= dt;
     if (e.next > 0) return;
     e.next = 55 + Math.random() * 70;
@@ -562,7 +780,7 @@ export class Game {
 
   pickupItems() {
     const s = this.s;
-    if (s.ov) return;
+    if (s.ov || s.walk) return;
     for (let i = Math.max(0, Math.floor((s.alt - 70) / ITEM_STEP)); i <= Math.floor((s.alt + 10) / ITEM_STEP); i++) {
       const it = this.item(i);
       if (!it || s.items.includes(i)) continue;
@@ -571,6 +789,8 @@ export class Game {
         let text;
         if (it.type === 'ration') { s.food = Math.min(MAX.food, s.food + 2); text = '+2 vivres'; }
         else if (it.type === 'gaz') { s.gas = Math.min(MAX.gas, s.gas + 1); text = '+1 gaz'; }
+        else if (it.type === 'piton') { s.pitonStock = Math.min(MAX.piton, s.pitonStock + 2); text = '+2 pitons'; }
+        else if (it.type === 'corde') { s.rope = Math.min(MAX.rope, s.rope + 60); text = '+60 m de corde'; }
         else { s.o2 = Math.min(MAX.o2, s.o2 + 1); text = '+1 oxygène'; }
         this.floats.push({ text, x: Math.round(s.x * K) - 16, t: 0 });
         this.say(`Trouvé : ${text.slice(1)}`, 'good');
@@ -586,9 +806,13 @@ export class Game {
       gu.warn -= dt;
       if (gu.warn <= 0) {
         gu.next = lerp(22, 9, wind) + Math.random() * 6;
-        if (this.grip) {
+        if (this.anchored) {
           s.energy = Math.max(0, s.energy - 2);
-          this.say('Tu tiens bon !', 'good');
+          this.say('Tu tiens bon, ancré au piton !', 'good');
+        } else if (s.walk) {
+          s.energy = Math.max(0, s.energy - 6);
+          s.walk.p = Math.max(0, s.walk.p - 0.06);
+          this.say('Rafale ! Tu es repoussé', 'bad');
         } else if (s.ov) {
           s.energy = Math.max(0, s.energy - 12);
           s.ov.p = Math.max(0, s.ov.p - 2);
@@ -609,14 +833,14 @@ export class Game {
     if (gu.next <= 0) {
       gu.warn = 1.8;
       gu.dir = Math.random() < 0.5 ? -1 : 1;
-      this.say('Rafale ! Maintiens la prise', 'bad');
+      this.say('Rafale ! Plante un piton', 'bad');
     }
   }
 
   // Chute de pierres : annoncée par une ligne pointillée, à esquiver en traversant.
   updateRock(dt) {
     const r = this.rock, s = this.s;
-    if (s.ov) { r.warn = 0; r.fall = 0; return; } // à l'abri sous le toit
+    if (s.ov || s.walk) { r.warn = 0; r.fall = 0; return; } // à l'abri sous le toit, ou sur une pente douce
     if (r.warn > 0) {
       r.warn -= dt;
       if (r.warn <= 0) { r.fall = 0.0001; r.hit = false; }
@@ -628,8 +852,8 @@ export class Game {
       if (!r.hit && y >= HERO_Y - 16) {
         r.hit = true;
         if (Math.abs(r.x - s.x) <= 6) {
-          s.energy = Math.max(0, s.energy - (this.grip ? 6 : 22));
-          if (!this.grip) s.alt = Math.max(0, s.alt - 12);
+          s.energy = Math.max(0, s.energy - (this.anchored ? 6 : 22));
+          if (!this.anchored) s.alt = Math.max(0, s.alt - 12);
           this.shake = 0.5;
           this.say('Touché par une pierre !', 'bad');
           if (s.energy <= 0) this.startFall('Épuisement');
@@ -651,13 +875,15 @@ export class Game {
     const s = this.s;
     if (this.fall) return;
     const below = s.camps.filter(c => c.a <= s.alt);
+    // Un piton relié par la corde retient la chute ; sinon on retombe au camp (ou à la grotte) le plus haut en dessous.
+    if (this.roped) for (const p of s.pitons) if (p.linked && p.a <= s.alt + 2) below.push({ a: p.a, x: p.x, piton: true });
     const target = below.length ? below.reduce((m, c) => (c.a > m.a ? c : m)) : { a: 0, x: 50 };
     s.falls++;
     s.o2On = false;
     s.ov = null;
+    s.walk = null;
     this.lastSide = null;
-    this.grip = false;
-    this.fall = { from: s.alt, to: target.a, x: target.x, t: 0 };
+    this.fall = { from: s.alt, to: target.a, x: target.x, t: 0, piton: !!target.piton };
     this.say(`${reason} : tu dévisses !`, 'bad');
   }
 
@@ -668,13 +894,13 @@ export class Game {
     if (f.t >= 1) {
       s.alt = f.to;
       s.x = f.x;
-      s.food = Math.max(f.to === 0 ? 5 : 0, s.food - 2);
-      if (f.to === 0) { s.gas = Math.max(s.gas, 3); s.o2 = Math.max(s.o2, 1); }
-      s.energy = 40;
+      if (!f.piton) s.food = Math.max(f.to === 0 ? 5 : 0, s.food - 2);
+      if (f.to === 0) { s.gas = Math.max(s.gas, 3); s.o2 = Math.max(s.o2, 1); s.pitonStock = Math.max(s.pitonStock, 3); }
+      s.energy = f.piton ? 55 : 40;
       s.warmth = Math.max(s.warmth, 40);
       this.fall = null;
       this.view = s.alt;
-      this.say(f.to === 0 ? 'De retour au camp de base' : `De retour au camp à ${Math.round(f.to)} m`, 'warn');
+      this.say(f.piton ? `Retenu par le piton à ${Math.round(f.to)} m` : f.to === 0 ? 'De retour au camp de base' : `De retour au camp à ${Math.round(f.to)} m`, 'warn');
     }
   }
 
@@ -701,11 +927,15 @@ export class Game {
     if (this.drawnMode === 'profile' && this.s.ov) {
       this.drawProfile(g, wind);
       this.drawWeather(g, wind, snow);
+    } else if (this.drawnMode === 'walk' && this.s.walk) {
+      this.drawWalk(g, wind);
+      this.drawWeather(g, wind, snow);
     } else {
       this.drawSky(g);
       this.drawFace(g, snow);
       this.drawClouds(g);
       this.drawObjects(g);
+      this.drawRopes(g);
       this.drawHero(g, wind);
       this.drawRock(g);
       this.drawWeather(g, wind, snow);
@@ -765,6 +995,45 @@ export class Game {
       drawText(g, label, L + 6, y - 11, P[3], 2);
       g.fillStyle = P[3];
       for (let x = L + 4; x < this.edgeR(a) * K - 2; x += 6) g.fillRect(x, y, 2, 1);
+    }
+  }
+
+  // Trait d'un pixel (Bresenham) : la corde reste du pixel art.
+  plotLine(g, x0, y0, x1, y1) {
+    let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (let i = 0; i < 400; i++) {
+      g.fillRect(x0, y0, 1, 1);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+
+  drawRopeLine(g, pts) {
+    const sc = pts.map(p => [Math.round(p.x * K), Math.round(this.ys(p.y))]);
+    if (sc.every(([, y]) => y < -20) || sc.every(([, y]) => y > H + 20)) return;
+    g.fillStyle = P[0];
+    for (let i = 0; i < sc.length - 1; i++) this.plotLine(g, sc[i][0] + 1, sc[i][1] + 1, sc[i + 1][0] + 1, sc[i + 1][1] + 1);
+    g.fillStyle = P[4];
+    for (let i = 0; i < sc.length - 1; i++) this.plotLine(g, sc[i][0], sc[i][1], sc[i + 1][0], sc[i + 1][1]);
+  }
+
+  drawRopes(g) {
+    for (const r of this.ropes) {
+      if (r.a.a > this.view + 130 || r.b.a < this.view - 130) continue;
+      this.drawRopeLine(g, r.rope.pts);
+    }
+    if (this.liveRope && !this.s.ov) this.drawRopeLine(g, this.liveRope.pts);
+    for (const p of this.s.pitons) {
+      if (p.ov !== undefined) continue;
+      const y = Math.round(this.ys(p.a)), x = Math.round(p.x * K);
+      if (y < -10 || y > H + 10) continue;
+      g.fillStyle = P[0]; g.fillRect(x - 3, y - 3, 7, 7);
+      g.fillStyle = P[3]; g.fillRect(x - 2, y - 2, 5, 5);
+      g.fillStyle = P[4]; g.fillRect(x - 1, y - 1, 3, 3);
     }
   }
 
@@ -841,7 +1110,7 @@ export class Game {
       drawText(g, 'Z', x + 6 + z * 6, HERO_Y - 28 - z * 6, P[4], 2);
       return;
     }
-    const grabbed = this.grip ? 'heroA' : this.frame ? 'heroB' : 'heroA';
+    const grabbed = this.anchored ? 'heroA' : this.frame ? 'heroB' : 'heroA';
     const sp = spriteCanvas(grabbed);
     const top = HERO_Y - sp.height;
     if (this.fall) {
@@ -882,13 +1151,9 @@ export class Game {
   // Géométrie du toit : face inférieure en y, bord (lèvre) en x.
   roofUnder(x) { return 112 + Math.round(7 * vnoise(x / 11, 21)); }
 
-  profileBackdrop(roof) {
-    if (this.backdrops[roof.id]) return this.backdrops[roof.id];
-    const c = document.createElement('canvas');
-    c.width = W; c.height = H;
-    const g = c.getContext('2d');
-    const LIP = 164, WALL = 30;
-    const alt = roof.a / SUMMIT;
+  // Décor lointain commun aux vues de profil : ciel tramé, deux plans de crêtes, mer de nuages.
+  paintVista(g, id, altitude, lift = 0) {
+    const alt = altitude / SUMMIT;
     // Ciel : trame de plus en plus sombre vers le haut, et d'autant plus que l'altitude est grande
     g.fillStyle = P[3]; g.fillRect(0, 0, W, H);
     for (let y = 0; y < H; y++) {
@@ -896,7 +1161,7 @@ export class Game {
       for (let x = 0; x < W; x++) if (BAYER[y % 4][x % 4] < dens) { g.fillStyle = P[2]; g.fillRect(x, y, 1, 1); }
     }
     // Chaînes lointaines : deux plans de crêtes, calottes de neige
-    for (const [seed, base, amp, col] of [[5, 238, 70, 2], [9, 268, 56, 1]]) {
+    for (const [seed, base, amp, col] of [[5, 238 - lift, 70, 2], [9, 268 - lift, 56, 1]]) {
       for (let x = 0; x < W; x++) {
         const top = Math.round(base - amp * Math.pow(vnoise(x / 24, seed), 1.4) - 8);
         g.fillStyle = P[col]; g.fillRect(x, top, 1, H - top);
@@ -907,13 +1172,22 @@ export class Game {
       }
     }
     // Mer de nuages au fond
-    for (let y = 270; y < H; y++) {
+    for (let y = 270 - lift; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        const v = hash(Math.floor(x / 5) * 211 + Math.floor(y / 3) * 17 + roof.id);
+        const v = hash(Math.floor(x / 5) * 211 + Math.floor(y / 3) * 17 + id);
         g.fillStyle = v < 0.5 ? P[3] : P[2];
-        if (y > 282 || v < 0.7) g.fillRect(x, y, 1, 1);
+        if (y > 282 - lift || v < 0.7) g.fillRect(x, y, 1, 1);
       }
     }
+  }
+
+  profileBackdrop(roof) {
+    if (this.backdrops[roof.id]) return this.backdrops[roof.id];
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const LIP = 164, WALL = 30;
+    this.paintVista(g, roof.id, roof.a);
     // Masse rocheuse au-dessus : on la voit en coupe, jusqu'à la lèvre du toit
     const zone = roof.a < 2400 ? 0 : roof.a < 5800 ? 1 : 2;
     for (let x = 0; x < LIP; x++) {
@@ -965,8 +1239,16 @@ export class Game {
     const frac = ov.p / roof.len;
     const hx = Math.round(46 + (LIP - 46 - 26) * frac - wind * K * Math.sin(this.clock * 6));
     this.profileHeroX = hx;
+    this.profileHeroY = this.roofUnder(hx) + 40;
+    for (const p of this.s.pitons) {
+      if (p.ov !== roof.id) continue;
+      const px = Math.round(46 + (LIP - 46 - 26) * (p.p / roof.len)), py = this.roofUnder(px) + 2;
+      g.fillStyle = P[0]; g.fillRect(px - 3, py - 1, 7, 7);
+      g.fillStyle = P[4]; g.fillRect(px - 2, py, 5, 5);
+      g.fillStyle = P[0]; g.fillRect(px, py + 2, 1, 1);
+    }
     const swing = this.clock - this.lastStep < 0.4 ? 1 : 0;
-    const sp = spriteCanvas(this.grip ? 'heroP1' : this.frame ? 'heroP2' : 'heroP1');
+    const sp = spriteCanvas(this.anchored ? 'heroP1' : this.frame ? 'heroP2' : 'heroP1');
     const hy = this.roofUnder(hx) + 1 + Math.round(Math.sin(this.clock * 2.4) * 1.2) + swing;
     g.drawImage(sp, hx - (sp.width >> 1), hy);
     // Titre et barre de progression
@@ -978,6 +1260,81 @@ export class Game {
       g.fillStyle = P[4];
       for (let k = 0; k < 6; k++) g.fillRect(hx + this.gust.dir * (14 + k * 2), hy + 12 + (k % 2) * 2, 2, 2);
     }
+    this.drawFloats(g);
+  }
+
+  // ── Vue de profil : pente douce à marcher ──────────────────────────────
+  // Sol de la pente : plateau, rampe lissée, plateau. La rampe monte du côté de la direction à suivre.
+  walkGround(sec, x) {
+    const x0 = 24, x1 = W - 24;
+    const t = smooth(clamp((x - x0) / (x1 - x0), 0, 1));
+    const rise = clamp(sec.slope * 190, 20, 92);
+    const up = sec.dir > 0 ? t : 1 - t;
+    return Math.round(238 - rise * up + 3 * (vnoise(x / 13, sec.id + 41) - 0.5) * 2);
+  }
+
+  walkBackdrop(sec) {
+    const key = `w${sec.id}`;
+    if (this.backdrops[key]) return this.backdrops[key];
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    this.paintVista(g, 100 + sec.id, sec.a, 110);
+    const zone = sec.a < 2400 ? 0 : sec.a < 5800 ? 1 : 2;
+    for (let x = 0; x < W; x++) {
+      const y = this.walkGround(sec, x);
+      g.drawImage(this.tiles[zone], x, (x * 5 + sec.id * 40) % 250, 1, H - y, x, y, 1, H - y);
+      for (let k = 0; k < 40; k++) { // ombre tramée sous la surface
+        const d = k / 40;
+        if (BAYER[(y + k) % 4][x % 4] / 16 < d * 0.9) { g.fillStyle = P[0]; g.fillRect(x, y + k, 1, 1); }
+      }
+      g.fillStyle = P[0]; g.fillRect(x, y, 1, 2);
+      g.fillStyle = P[3]; g.fillRect(x, y + 2, 1, 3 + Math.floor(hash(x * 3 + sec.id) * 3));
+      g.fillStyle = P[2]; if (x % 2) g.fillRect(x, y + 6, 1, 1);
+    }
+    for (let i = 0; i < 9; i++) { // petits blocs posés sur la pente
+      const x = 14 + Math.floor(hash(sec.id * 61 + i) * (W - 28)), y = this.walkGround(sec, x);
+      g.fillStyle = P[0]; g.fillRect(x - 4, y - 5, 9, 6);
+      g.fillStyle = P[1]; g.fillRect(x - 3, y - 4, 7, 4);
+      g.fillStyle = P[3]; g.fillRect(x - 3, y - 4, 3, 1);
+    }
+    this.backdrops[key] = c;
+    return c;
+  }
+
+  drawWalk(g, wind) {
+    const s = this.s, wk = s.walk, sec = this.walks[wk.id];
+    g.drawImage(this.walkBackdrop(sec), 0, 0);
+    const x0 = 24, x1 = W - 24;
+    const hx = Math.round(sec.dir > 0 ? x0 + wk.p * (x1 - x0) : x1 - wk.p * (x1 - x0));
+    const hy = this.walkGround(sec, hx) + 2;
+    this.profileHeroX = hx;
+    this.profileHeroY = hy - 8;
+    if (this.sleep) {
+      const t = spriteCanvas('tent');
+      g.drawImage(t, hx - (t.width >> 1), hy - t.height);
+      const z = Math.floor(this.clock * 2) % 3;
+      drawText(g, 'Z', hx + 6 + z * 6, hy - 30 - z * 6, P[4], 2);
+    } else {
+      const walking = this.walkMoving && this.clock - this.lastStep < 0.2;
+      const sp = spriteCanvas(walking && Math.floor(this.walkAnim * 5) % 2 ? 'heroW2' : 'heroW1');
+      g.save();
+      g.translate(hx + wind * Math.sin(this.clock * 6), hy - sp.height + (walking && Math.floor(this.walkAnim * 5) % 2 ? -1 : 0));
+      if (sec.dir < 0) g.scale(-1, 1);
+      g.drawImage(sp, -(sp.width >> 1), 0);
+      g.restore();
+      if (Math.floor(this.clock * 3) % 2) { // chevrons pour indiquer le sens de la marche
+        g.fillStyle = P[4];
+        for (let k = 0; k < 3; k++) {
+          const cx = hx + sec.dir * (22 + k * 8), cy = this.walkGround(sec, cx) - 22;
+          for (let r = 0; r < 4; r++) g.fillRect(cx - sec.dir * r, cy - 3 + r, 1, 1), g.fillRect(cx - sec.dir * r, cy + 4 - r, 1, 1);
+        }
+      }
+    }
+    drawText(g, 'PENTE', 66, 176, P[0], 2);
+    g.fillStyle = P[0]; g.fillRect(66, 192, 68, 12);
+    g.fillStyle = P[3]; g.fillRect(68, 194, 64, 8);
+    g.fillStyle = P[4]; g.fillRect(68, 194, Math.round(64 * wk.p), 8);
     this.drawFloats(g);
   }
 
@@ -1037,8 +1394,9 @@ export class Game {
       n.globalCompositeOperation = 'destination-out';
       n.fillStyle = 'rgba(0,0,0,0.4)';
       const r0 = (this.sleep ? 40 : 30) * K;
-      const cx = this.s.ov && this.drawnMode === 'profile' ? (this.profileHeroX ?? W / 2) : this.hx * K;
-      const cy = this.s.ov && this.drawnMode === 'profile' ? 140 : HERO_Y - 8;
+      const cx = this.drawnMode !== 'face' && (this.s.ov || this.s.walk) ? (this.profileHeroX ?? W / 2) : this.hx * K;
+      const inProfile = this.drawnMode !== 'face' && (this.s.ov || this.s.walk);
+      const cy = inProfile ? (this.profileHeroY ?? 140) : HERO_Y - 8;
       for (const r of [r0, r0 * 0.7, r0 * 0.4]) {
         n.beginPath(); n.arc(cx, cy, r, 0, Math.PI * 2); n.fill();
       }
