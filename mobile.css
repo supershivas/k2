@@ -29,7 +29,9 @@ body {
   input[type="number"],
   textarea,
   select {
-    font-size: 16px;
+    /* !important : un font-size en ligne (style={{ fontSize }}) battrait la règle
+       et ramènerait le zoom iOS. */
+    font-size: 16px !important;
   }
 }
 
