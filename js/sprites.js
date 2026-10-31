@@ -22,6 +22,7 @@ export const SPRITE_DEFS = [
   { id: 'piton', label: 'Pitons' },
   { id: 'corde', label: 'Corde' },
   { id: 'o2', label: 'Oxygène' },
+  { id: 'relic', label: 'Relique' },
 ];
 
 // Un caractère = un index de palette, « . » = transparent.
@@ -106,7 +107,22 @@ function makeCave() {
   return { w, h, px };
 }
 
+// Relique : étoile à quatre branches, rose fluo, cœur clair.
+function makeRelic() {
+  const w = 16, h = 16, px = new Array(w * h).fill(-1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = Math.abs(x - 7.5) / 7.5, dy = Math.abs(y - 7.5) / 7.5;
+      const d = Math.pow(dx, 0.66) + Math.pow(dy, 0.66);
+      if (d <= 1) px[y * w + x] = d < 0.45 ? 3 : 4;
+      else if (d <= 1.22 && d > 1) px[y * w + x] = 0;
+    }
+  }
+  return { w, h, px };
+}
+
 export const DEFAULTS = {
+  relic: makeRelic(),
   ...Object.fromEntries(Object.entries(ART).map(([id, rows]) => [id, parse(rows)])),
   ...Object.fromEntries(Object.entries(ART8).map(([id, rows]) => [id, upscale(parse(rows))])),
   grotte: makeCave(),

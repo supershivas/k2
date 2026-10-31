@@ -201,6 +201,30 @@ dialog.modal[open] { display: flex; flex-direction: column; gap: 16px; }
 
 /* Sac */
 .tabs-3 { grid-template-columns: repeat(3, 1fr); }
+.tabs-5 { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.tabs-5 .tab { font-size: 0.68rem; }
+.pz-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.relic-head { display: flex; align-items: center; gap: 14px; }
+.relic-head canvas { width: 64px; height: 64px; image-rendering: pixelated; background: var(--gb1); border-radius: var(--radius-md); padding: 6px; }
+.relic-head small { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; }
+#rl-text { font-size: 0.9rem; color: var(--fg); }
+.xpbar { height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+.xpbar > div { height: 100%; background: var(--accent); }
+.lvl { display: flex; justify-content: space-between; align-items: baseline; font: 500 0.9rem var(--font-mono); margin-bottom: 6px; }
+.branches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.branch { display: grid; gap: 6px; align-content: start; }
+.branch h4 { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.skill { min-height: 76px; padding: 6px; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.7rem; color: var(--muted); display: grid; align-content: start; gap: 2px; }
+.skill b { color: var(--fg); font-size: 0.74rem; font-weight: 600; }
+.skill.owned { background: var(--selected); border-color: var(--accent); }
+.skill.owned b { color: var(--selected-fg); }
+.skill.can { border-color: var(--fg); }
+.skill:disabled { opacity: 0.55; }
+.relics { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.relics li { padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.8rem; color: var(--muted); }
+.relics li b { color: var(--fg); display: block; font-size: 0.86rem; }
+.relics li.locked { opacity: 0.6; }
+.chip.pts { background: var(--fluo); color: var(--gb0); text-shadow: none; }
 .tabs-2 { grid-template-columns: repeat(2, 1fr); margin-bottom: 8px; }
 .bag-panel { display: block; }
 .inv { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }

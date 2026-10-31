@@ -38,6 +38,7 @@
           <span class="chip" title="Vivres"><i class="ti ti-meat"></i><b id="c-food">0</b></span>
           <span class="chip" title="Gaz"><i class="ti ti-flame"></i><b id="c-gas">0</b></span>
           <span class="chip" id="chip-o2" title="Oxygène"><i class="ti ti-bottle"></i><b id="c-o2">0</b></span>
+          <span class="chip" id="chip-lvl" title="Niveau"><i class="ti ti-star"></i><b id="c-lvl">1</b></span>
           <span class="chip chip-weather" id="chip-wind" hidden><i class="ti ti-wind"></i></span>
           <span class="chip chip-weather" id="chip-snow" hidden><i class="ti ti-snowflake"></i></span>
         </div>
@@ -129,10 +130,12 @@
 
   <dialog id="bag" class="modal modal-narrow radio">
     <div class="modal-head"><h2>Sac</h2><button class="icon-btn" data-close type="button" aria-label="Fermer"><i class="ti ti-x"></i></button></div>
-    <div class="tabs tabs-3" id="bag-tabs" role="tablist">
+    <div class="tabs tabs-5" id="bag-tabs" role="tablist">
       <button class="tab" type="button" role="tab" data-tab="inv">Inventaire</button>
       <button class="tab" type="button" role="tab" data-tab="meteo">Météo</button>
       <button class="tab" type="button" role="tab" data-tab="map">Carte</button>
+      <button class="tab" type="button" role="tab" data-tab="skills">Talents</button>
+      <button class="tab" type="button" role="tab" data-tab="relics">Reliques</button>
     </div>
     <section class="bag-panel" id="bag-inv"><ul class="inv" id="inv-list"></ul></section>
     <section class="bag-panel" id="bag-meteo" hidden>
@@ -151,6 +154,21 @@
         <div class="gb-label">Carte du K2 : tu es le point rose</div>
       </div>
     </section>
+    <section class="bag-panel" id="bag-skills" hidden></section>
+    <section class="bag-panel" id="bag-relics" hidden></section>
+  </dialog>
+
+  <dialog id="puzzle" class="modal modal-narrow radio" data-sticky>
+    <div class="modal-head"><h2 id="pz-title"></h2></div>
+    <p class="hint" id="pz-text"></p>
+    <div class="gb-body"><div class="gb-screen"><canvas id="pz-canvas" width="160" height="144" aria-label="Mini-puzzle"></canvas></div></div>
+    <div class="pz-actions" id="pz-actions"></div>
+  </dialog>
+
+  <dialog id="relic" class="modal modal-narrow">
+    <div class="relic-head"><canvas id="rl-icon" width="16" height="16" aria-hidden="true"></canvas><div><small>Relique trouvée</small><h2 id="rl-name"></h2></div></div>
+    <p id="rl-text"></p>
+    <div class="ed-foot"><button class="btn btn-primary" data-close type="button"><i class="ti ti-check"></i> Continuer</button></div>
   </dialog>
 
   <dialog id="confirm" class="modal modal-narrow">

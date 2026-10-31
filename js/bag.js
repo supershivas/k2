@@ -3,17 +3,32 @@
 import { PALETTE as P } from './sprites.js';
 import { drawText } from './pixfont.js';
 import { OVERHANGS, SUMMIT } from './game.js';
+import { BRANCHES, SKILLS, MAX_LEVEL, xpForLevel } from './progress.js';
+import { RELICS } from './relics.js';
 
 const $ = id => document.getElementById(id);
 let game;
 let tab = 'inv';
 let day = 0;
+let onChange;
 
-export function initBag(g) {
+export function initBag(g, changed) {
   game = g;
+  onChange = changed;
   $('bag-tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
     if (b) showTab(b.dataset.tab);
+  });
+  $('bag-skills').addEventListener('click', e => {
+    const b = e.target.closest('[data-skill]');
+    if (!b) return;
+    const id = b.dataset.skill;
+    if (game.progress.buy(id)) {
+      game.onSkillBought(id);
+      game.say(`Talent acquis : ${SKILLS.find(k => k.id === id).name}`, 'good');
+      drawSkills();
+      onChange?.();
+    }
   });
   $('day-tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-day]');
@@ -34,9 +49,13 @@ function showTab(which) {
   $('bag-inv').hidden = which !== 'inv';
   $('bag-meteo').hidden = which !== 'meteo';
   $('bag-map').hidden = which !== 'map';
+  $('bag-skills').hidden = which !== 'skills';
+  $('bag-relics').hidden = which !== 'relics';
   if (which === 'inv') drawInventory();
   if (which === 'meteo') drawMeteo();
   if (which === 'map') drawMap();
+  if (which === 'skills') drawSkills();
+  if (which === 'relics') drawRelics();
 }
 
 // ── Inventaire ───────────────────────────────────────────────────────────
@@ -175,4 +194,72 @@ function drawMap() {
   g.fillStyle = Math.floor(performance.now() / 400) % 2 ? P[4] : P[3]; g.fillRect(hx - 3, hy - 3, 7, 7);
   g.fillStyle = P[0]; g.fillRect(hx - 1, hy - 1, 3, 3);
   drawText(g, `${Math.round(s.alt)} M`, hx + 8 > 130 ? hx - 36 : hx + 8, hy - 2, P[0]);
+}
+
+// ── Talents ──────────────────────────────────────────────────────────────
+function drawSkills() {
+  const pr = game.progress;
+  const root = $('bag-skills');
+  root.replaceChildren();
+  const head = document.createElement('div');
+  const lvl = document.createElement('div');
+  lvl.className = 'lvl';
+  const next = pr.level < MAX_LEVEL ? `${pr.xp - xpForLevel(pr.level)} / ${xpForLevel(pr.level + 1) - xpForLevel(pr.level)} XP` : 'niveau max';
+  lvl.innerHTML = '<span></span><span></span>';
+  lvl.children[0].textContent = `Niveau ${pr.level}`;
+  lvl.children[1].textContent = pr.points > 0 ? `${pr.points} point${pr.points > 1 ? 's' : ''} à dépenser` : next;
+  const bar = document.createElement('div');
+  bar.className = 'xpbar';
+  const fill = document.createElement('div');
+  fill.style.width = `${Math.round(pr.ratio * 100)}%`;
+  bar.append(fill);
+  head.append(lvl, bar);
+  const cols = document.createElement('div');
+  cols.className = 'branches';
+  BRANCHES.forEach((br, bi) => {
+    const col = document.createElement('div');
+    col.className = 'branch';
+    const h = document.createElement('h4');
+    const ic = document.createElement('i'); ic.className = `ti ${br.icon}`;
+    h.append(ic, br.name);
+    col.append(h);
+    SKILLS.slice(bi * 4, bi * 4 + 4).forEach(sk => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.skill = sk.id;
+      const owned = pr.has(sk.id), can = pr.canBuy(sk.id);
+      b.className = `skill${owned ? ' owned' : ''}${can ? ' can' : ''}`;
+      b.disabled = !can;
+      const t = document.createElement('b'); t.textContent = sk.name;
+      b.append(t, sk.text);
+      col.append(b);
+    });
+    cols.append(col);
+  });
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.style.marginTop = '10px';
+  hint.textContent = 'L’XP vient de la montée, des dévers, des pentes, des puzzles et des reliques. Un point de talent par niveau ; chaque talent demande le précédent de sa branche.';
+  root.append(head, cols, hint);
+}
+
+// ── Reliques ─────────────────────────────────────────────────────────────
+function drawRelics() {
+  const pr = game.progress;
+  const ul = document.createElement('ul');
+  ul.className = 'relics';
+  for (const r of RELICS) {
+    const li = document.createElement('li');
+    const found = pr.hasRelic(r.id);
+    li.className = found ? '' : 'locked';
+    const b = document.createElement('b');
+    b.textContent = found ? `${r.name} (${r.year})` : `??? · vers ${r.a.toLocaleString('fr-FR')} m`;
+    li.append(b, found ? r.text : 'Une relique de l’histoire de l’escalade t’attend sur la paroi.');
+    ul.append(li);
+  }
+  const count = document.createElement('p');
+  count.className = 'hint';
+  count.style.marginBottom = '8px';
+  count.textContent = `${pr.relics.length} / ${RELICS.length} reliques trouvées`;
+  $('bag-relics').replaceChildren(count, ul);
 }

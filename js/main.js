@@ -1,6 +1,8 @@
-import { Game, SUMMIT, newState } from './game.js';
+import { Game, SUMMIT } from './game.js';
 import { loadSprites, getUserEdits, importSprites, getToken, setToken, publishSprites, resetAllSprites } from './sprites.js';
 import { initBag, openBag } from './bag.js';
+import { runPuzzle } from './puzzles.js';
+import { paintSprite, getSprite } from './sprites.js';
 import { initEditor, openEditor } from './editor.js';
 import { startUpdateCheck, loadChangelog, loadVersion, downloadJSON } from '../app-update.js';
 
@@ -75,6 +77,30 @@ function confirmDialog(title, text, okLabel = 'Confirmer', cancelLabel = 'Annule
 }
 
 // ── Jeu ──────────────────────────────────────────────────────────────────
+// Relique trouvée : fenêtre avec son histoire
+function showRelic(r) {
+  const sp = getSprite('relic');
+  const c = $('rl-icon');
+  c.width = sp.w; c.height = sp.h;
+  paintSprite(c.getContext('2d'), sp);
+  $('rl-name').textContent = r.name;
+  $('rl-text').textContent = `${r.year} · ${r.text}`;
+  game.hold.L = game.hold.R = false;
+  $('relic').showModal();
+}
+
+// Mini-puzzle en attente : s'ouvre dès que le jeu est en cours (et reprend après un retour à l'accueil)
+let puzzleOpen = false;
+async function openPuzzle() {
+  const spec = game.puzzleSpec();
+  if (!spec) { game.s.puzzle = null; return; }
+  puzzleOpen = true;
+  game.hold.L = game.hold.R = false;
+  const res = await runPuzzle(spec, { easy: spec.easy });
+  puzzleOpen = false;
+  if (res) { game.finishPuzzle(res); save(); }
+}
+
 // Bandeau d'événement aléatoire (30 possibles, voir events.js)
 let eventTimer;
 function showEvent(ev) {
@@ -90,6 +116,7 @@ function showEvent(ev) {
 const game = new Game($('game'), {
   say,
   event: showEvent,
+  relic: showRelic,
   summit: onSummit,
 });
 
@@ -114,7 +141,7 @@ function onSummit() {
 }
 
 function newClimb() {
-  game.load(newState());
+  game.load(game.freshState());
   save();
   showHome();
 }
@@ -124,6 +151,7 @@ function renderHome() {
   $('btn-play-label').textContent = s.steps > 0 && !s.summit ? `Continuer · ${fmt(s.alt)} m` : 'Grimper';
   const bits = [];
   if (records.maxAlt) bits.push(`Record ${fmt(records.maxAlt)} m`);
+  bits.push(`Niveau ${game.progress.level}`);
   if (records.summits) bits.push(`${records.summits} sommet${records.summits > 1 ? 's' : ''}`);
   $('records').textContent = bits.join(' · ');
 }
@@ -166,6 +194,8 @@ function updateHud() {
   $('c-food').textContent = s.food;
   $('c-gas').textContent = s.gas;
   $('c-o2').textContent = s.o2 + (s.o2Sec > 0 ? '+' : '');
+  $('c-lvl').textContent = game.progress.level;
+  $('chip-lvl').classList.toggle('pts', game.progress.points > 0);
   $('chip-o2').classList.toggle('on', game.oxygenActive);
   const { wind, snow } = game.weather;
   $('chip-wind').hidden = wind < 0.3;
@@ -181,7 +211,9 @@ let prev = performance.now(), hudAt = 0, saveAt = 0;
 function loop(now) {
   const dt = (now - prev) / 1000;
   prev = now;
-  if (!document.querySelector('dialog[open]')) game.update(dt);
+  const modal = document.querySelector('dialog[open]');
+  if (!modal) game.update(dt);
+  if (!modal && game.playing && game.s.puzzle && !puzzleOpen) openPuzzle();
   game.render();
   if (now - hudAt > 100) { hudAt = now; updateHud(); }
   if (game.playing && now - saveAt > 2000) { saveAt = now; updateRecords(); save(); saveRecords(); }
@@ -231,7 +263,7 @@ $('btn-play').addEventListener('click', play);
 $('btn-editor').addEventListener('click', () => openEditor());
 $('open-settings').addEventListener('click', openSettings);
 document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-document.querySelectorAll('dialog.modal').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+document.querySelectorAll('dialog.modal:not([data-sticky])').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 $('s-editor').addEventListener('click', () => { $('settings').close(); openEditor(); });
 $('s-new').addEventListener('click', async () => {
   if (!await confirmDialog('Nouvelle ascension ?', 'Ta progression actuelle sera perdue. Tes records et tes sprites sont conservés.', 'Recommencer')) return;
@@ -278,7 +310,7 @@ $('s-publish').addEventListener('click', async () => {
 $('s-export').addEventListener('click', async () => {
   updateRecords();
   const version = await loadVersion();
-  downloadJSON({ app: 'k2', version, exportedAt: new Date().toISOString(), save: game.s, records, sprites: getUserEdits() }, 'k2-export.json');
+  downloadJSON({ app: 'k2', version, exportedAt: new Date().toISOString(), save: game.s, records, sprites: getUserEdits(), progress: game.progress.toJSON() }, 'k2-export.json');
 });
 $('s-import').addEventListener('click', () => $('s-file').click());
 $('s-file').addEventListener('change', async e => {
@@ -291,6 +323,7 @@ $('s-file').addEventListener('change', async e => {
     if (data.save) { game.load(data.save); save(); }
     if (data.records) { records = Object.assign(records, data.records); saveRecords(); }
     if (data.sprites) importSprites(data.sprites);
+    if (data.progress) game.progress.replace(data.progress);
     renderHome();
     toast('Export importé');
   } catch (err) {
@@ -300,9 +333,9 @@ $('s-file').addEventListener('change', async e => {
 
 // ── Démarrage ────────────────────────────────────────────────────────────
 initEditor({ confirm: confirmDialog });
-initBag(game);
+initBag(game, updateHud);
 applyTokens();
-game.load(read(KEYS.save, newState()));
+game.load(read(KEYS.save, null) || game.freshState());
 loadSprites();
 showHome();
 requestAnimationFrame(loop);

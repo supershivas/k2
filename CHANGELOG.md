@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-10-31
+- Mini-puzzles pendant l'ascension : lire la paroi, équilibre sur une vire, réparer le réchaud
+- 10 reliques de l'histoire de l'escalade à trouver (appareil photo de Mallory, piolet d'Irvine…)
+- XP, niveaux et arbre de talents (Endurance, Technique, Survie) dans le sac
+
 ## 1.3.0 — 2026-10-31
 - Pitons (en nombre limité) à la place de la prise, et corde de longueur limitée qui s'accroche aux pitons, avec une vraie physique
 - En cas de chute, on retombe au dernier piton relié par la corde, sinon au camp ou à la grotte
