@@ -22,8 +22,10 @@ function mix(n) {
 export function limbSequence(seed, n) {
   const order = [...LIMBS];
   const out = [];
+  let skipped = 0; // fois d'affilée où le plus vieux a été doublé : jamais plus de deux
   for (let j = 0; j <= n; j++) {
-    const idx = mix(seed * 7 + j * 13 + 5) < SWAP_CHANCE ? 1 : 0;
+    const idx = skipped < 2 && mix(seed * 7 + j * 13 + 5) < SWAP_CHANCE ? 1 : 0;
+    skipped = idx === 1 ? skipped + 1 : 0;
     const limb = order.splice(idx, 1)[0];
     order.push(limb);
     out.push({ limb, side: limb[1], kind: limb[0] === 'h' ? 'hand' : 'foot' });
